@@ -1,4 +1,4 @@
-# app.py (Version complète et optimisée pour mobile)
+# app.py (Version finale complète - 15/06/2025)
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -9,19 +9,17 @@ from collections import defaultdict
 from functools import lru_cache
 import folium
 from streamlit_folium import st_folium
-import numpy # Assurez-vous que numpy est bien dans requirements.txt
+import numpy
 
 # --- CONFIGURATION ET CONSTANTES ---
-START_LOCATION_DEFAULT = 'Entree'
-# --- CONFIGURATION ET CONSTANTES ---
 
-# 1. Define the master list FIRST.
+# 1. Définir la liste maîtresse en premier.
 ATTRACTIONS_MASTER_LIST = [
     'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
     'Pirates in Batavia', 'Silver Star', 'Arthur', 'Matterhorn-Blitz', 'Eurosat', 'Poseidon'
 ]
 
-# 2. Now you can define other variables that might use the list.
+# 2. Définir les autres constantes
 START_LOCATION_DEFAULT = 'Entree'
 
 URLS = {
@@ -37,8 +35,6 @@ URLS = {
     'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
     'Poseidon': 'https://queue-times.com/fr/parks/51/rides/5611'
 }
-
-
 
 COMPLETE_EDGES_UNPONDERED = [
     ('Blue Fire', 'Voltron Nevera', 15), ('Blue Fire', 'Wodan', 3), ('Blue Fire', 'Euro-Mir', 11), ('Blue Fire', 'Voletarium', 28),
@@ -146,7 +142,7 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
     best_choice_details = None
     lowest_cost = float('inf')
     
-    with st.expander("🕵️ Voir les détails du calcul pour chaque attraction"):
+    with st.expander("🕵️ Voir les détails du calcul"):
         for candidate in attractions_to_visit:
             if candidate == current_location: continue
             travel_time = travel_times.get((current_location, candidate), float('inf'))
@@ -165,10 +161,10 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
             col1, col2, col3 = st.columns(3)
             diff = real_current_wait - predicted_wait_now if predicted_wait_now is not None else 0
             
-            col1.metric("🚶‍♂️ Temps de trajet", f"{travel_time:.0f} min")
-            col2.metric("⏱️ Attente (Réel / Prédit)", f"{real_current_wait:.0f} / {predicted_wait_now or 'N/A':.0f} min",
+            col1.metric("🚶‍♂️ Trajet", f"{travel_time:.0f} min")
+            col2.metric("⏱️ Attente (Réel/Prédit)", f"{real_current_wait:.0f} / {predicted_wait_now or 'N/A':.0f} min",
                         delta=f"{diff:.0f} min", delta_color="inverse")
-            col3.metric("✨ Coût Final", f"{total_cost:.2f}")
+            col3.metric("✨ Coût", f"{total_cost:.2f}")
             
             if total_cost < lowest_cost:
                 lowest_cost = total_cost
@@ -182,7 +178,7 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
 def create_park_map(coords, history, current_loc, recommendation):
     avg_lat = sum(c[0] for c in coords.values()) / len(coords)
     avg_lon = sum(c[1] for c in coords.values()) / len(coords)
-    m = folium.Map(location=[avg_lat, avg_lon], zoom_start=16, tiles="CartoDB positron")
+    m = folium.Map(location=[avg_lat, avg_lon], zoom_start=15, tiles="CartoDB positron")
 
     if len(history) > 1:
         path_coords = [coords[loc] for loc in history if loc in coords]
@@ -215,9 +211,9 @@ def create_park_map(coords, history, current_loc, recommendation):
         
     return m
 
-# --- INTERFACE STREAMLIT (Mobile-First) ---
+# --- INTERFACE STREAMLIT ---
 
-st.set_page_config(layout="wide", page_title="Optimiseur Europa-Park")
+st.set_page_config(layout="wide", page_title="Optimiseur de Parc")
 
 # Initialisation de l'état de la session
 if 'attractions_to_visit' not in st.session_state:
@@ -260,16 +256,8 @@ with st.sidebar:
         for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
 
-# --- Mise en page principale (sans colonnes) ---
-
-st.header("🗺️ Carte et Prochaine Étape")
-park_map = create_park_map(
-    coords=ATTRACTIONS_COORDS,
-    history=st.session_state.history,
-    current_loc=st.session_state.current_location,
-    recommendation=st.session_state.last_recommendation
-)
-st_folium(park_map, width='100%', height=400)
+# --- Mise en page principale (Bouton avant la carte) ---
+st.header("Prochaine Étape")
 
 if st.button("💡 Trouver la meilleure prochaine attraction", type="primary", use_container_width=True):
     if not st.session_state.attractions_to_visit:
@@ -284,6 +272,7 @@ if st.button("💡 Trouver la meilleure prochaine attraction", type="primary", u
             )
             st.session_state.last_recommendation = recommendation
 
+# Placeholder pour les résultats
 recommendation_placeholder = st.container()
 if st.session_state.last_recommendation:
     rec = st.session_state.last_recommendation
@@ -303,6 +292,16 @@ if st.session_state.last_recommendation:
             st.rerun()
 
 st.markdown("---")
+st.header("🗺️ Carte du Parc")
+park_map = create_park_map(
+    coords=ATTRACTIONS_COORDS,
+    history=st.session_state.history,
+    current_loc=st.session_state.current_location,
+    recommendation=st.session_state.last_recommendation
+)
+st_folium(park_map, width='100%', height=400)
+
+st.markdown("---")
 with st.expander(f"Votre Plan ({len(st.session_state.attractions_to_visit)} attractions restantes)"):
     if st.session_state.attractions_to_visit:
         for attraction in st.session_state.attractions_to_visit:
@@ -313,4 +312,3 @@ with st.expander(f"Votre Plan ({len(st.session_state.attractions_to_visit)} attr
     if st.session_state.history and len(st.session_state.history) > 1:
         st.markdown("**Parcours effectué :**")
         st.write(" -> ".join(st.session_state.history))
-        
