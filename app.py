@@ -13,19 +13,32 @@ import numpy # Assurez-vous que numpy est bien dans requirements.txt
 
 # --- CONFIGURATION ET CONSTANTES ---
 START_LOCATION_DEFAULT = 'Entree'
+# --- CONFIGURATION ET CONSTANTES ---
+
+# 1. Define the master list FIRST.
 ATTRACTIONS_MASTER_LIST = [
     'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
     'Pirates in Batavia', 'Silver Star', 'Arthur', 'Matterhorn-Blitz', 'Eurosat', 'Poseidon'
 ]
 
+# 2. Now you can define other variables that might use the list.
+START_LOCATION_DEFAULT = 'Entree'
+
 URLS = {
-    'Blue Fire': 'https://queue-times.com/fr/parks/51/rides/5603', 'Voltron Nevera': 'https://queue-times.com/fr/parks/51/rides/13349',
-    'Wodan': 'https://queue-times.com/fr/parks/51/rides/5602', 'Euro-Mir': 'https://queue-times.com/fr/parks/51/rides/5605',
-    'Voletarium': 'https://queue-times.com/fr/parks/51/rides/5630', 'Pirates in Batavia': 'https://queue-times.com/fr/parks/51/rides/5617',
-    'Silver Star': 'https://queue-times.com/fr/parks/51/rides/5604', 'Arthur': 'https://queue-times.com/fr/parks/51/rides/5618',
-    'Matterhorn-Blitz': 'https://queue-times.com/fr/parks/51/rides/5607', 'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
+    'Blue Fire': 'https://queue-times.com/fr/parks/51/rides/5603',
+    'Voltron Nevera': 'https://queue-times.com/fr/parks/51/rides/13349',
+    'Wodan': 'https://queue-times.com/fr/parks/51/rides/5602',
+    'Euro-Mir': 'https://queue-times.com/fr/parks/51/rides/5605',
+    'Voletarium': 'https://queue-times.com/fr/parks/51/rides/5630',
+    'Pirates in Batavia': 'https://queue-times.com/fr/parks/51/rides/5617',
+    'Silver Star': 'https://queue-times.com/fr/parks/51/rides/5604',
+    'Arthur': 'https://queue-times.com/fr/parks/51/rides/5618',
+    'Matterhorn-Blitz': 'https://queue-times.com/fr/parks/51/rides/5607',
+    'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
     'Poseidon': 'https://queue-times.com/fr/parks/51/rides/5611'
 }
+
+
 
 COMPLETE_EDGES_UNPONDERED = [
     ('Blue Fire', 'Voltron Nevera', 15), ('Blue Fire', 'Wodan', 3), ('Blue Fire', 'Euro-Mir', 11), ('Blue Fire', 'Voletarium', 28),
@@ -300,3 +313,4 @@ with st.expander(f"Votre Plan ({len(st.session_state.attractions_to_visit)} attr
     if st.session_state.history and len(st.session_state.history) > 1:
         st.markdown("**Parcours effectué :**")
         st.write(" -> ".join(st.session_state.history))
+        
