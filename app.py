@@ -57,10 +57,18 @@ COMPLETE_EDGES_UNPONDERED = [
 ]
 
 ATTRACTIONS_COORDS = {
-    'Entree': (48.2655, 7.7215), 'Voletarium': (48.2650, 7.7210), 'Eurosat': (48.2635, 7.7218),
-    'Silver Star': (48.2625, 7.7210), 'Euro-Mir': (48.2630, 7.7230), 'Wodan': (48.2680, 7.7205),
-    'Blue Fire': (48.2675, 7.7200), 'Voltron Nevera': (48.2615, 7.7235), 'Pirates in Batavia': (48.2665, 7.7190),
-    'Arthur': (48.2700, 7.7210), 'Matterhorn-Blitz': (48.2645, 7.7225), 'Poseidon': (48.2610, 7.7225)
+    'Entree': (48.26886239084585, 7.7218611694409045),
+    'Voletarium': (48.26917304513733, 7.722443208799992),
+    'Eurosat': (48.267451577912816, 7.72113123949057),
+    'Silver Star': (48.26779998024085, 7.720126590003773),
+    'Euro-Mir': (48.26507602609998, 7.720178628240745),
+    'Wodan': (48.26138819760847, 7.7192129584382885),
+    'Blue Fire': (48.26265872340149, 7.718827721822693),
+    'Voltron Nevera': (48.2657797944176, 7.719762395202016), # Coordonnées à ajuster
+    'Pirates in Batavia': (48.26358868421831, 7.7204499731581135),
+    'Arthur': (48.26389057631639, 7.723843203049346),
+    'Matterhorn-Blitz': (48.26691168136572, 7.72049900063425),
+    'Poseidon': (48.26666361205288, 7.719339791552477)
 }
 
 # --- FONCTIONS UTILITAIRES ---
@@ -142,7 +150,7 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
     best_choice_details = None
     lowest_cost = float('inf')
     
-    with st.expander("🕵️ Voir les détails du calcul"):
+    with st.expander("Voir les détails du calcul"):
         for candidate in attractions_to_visit:
             if candidate == current_location: continue
             travel_time = travel_times.get((current_location, candidate), float('inf'))
@@ -161,10 +169,10 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
             col1, col2, col3 = st.columns(3)
             diff = real_current_wait - predicted_wait_now if predicted_wait_now is not None else 0
             
-            col1.metric("🚶‍♂️ Trajet", f"{travel_time:.0f} min")
-            col2.metric("⏱️ Attente (Réel/Prédit)", f"{real_current_wait:.0f} / {predicted_wait_now or 'N/A':.0f} min",
+            col1.metric("Trajet", f"{travel_time:.0f} min")
+            col2.metric("Attente (Réel/Prédit)", f"{real_current_wait:.0f} / {predicted_wait_now or 'N/A':.0f} min",
                         delta=f"{diff:.0f} min", delta_color="inverse")
-            col3.metric("✨ Coût", f"{total_cost:.2f}")
+            col3.metric("Coût", f"{total_cost:.2f}")
             
             if total_cost < lowest_cost:
                 lowest_cost = total_cost
@@ -226,7 +234,7 @@ if 'history' not in st.session_state:
     st.session_state.history = [START_LOCATION_DEFAULT]
 
 
-st.title("🎢 Optimiseur de Visite")
+st.title("Optimiseur AfflueMap")
 
 with st.sidebar:
     st.header("Configuration")
@@ -250,7 +258,7 @@ with st.sidebar:
         st.session_state.history = [current_location_selection]
         st.rerun()
 
-    st.info(f"📍 **Position :** {st.session_state.current_location}")
+    st.info(f"**Position :** {st.session_state.current_location}")
 
     if st.button("Réinitialiser la journée"):
         for key in list(st.session_state.keys()): del st.session_state[key]
@@ -259,7 +267,7 @@ with st.sidebar:
 # --- Mise en page principale (Bouton avant la carte) ---
 st.header("Prochaine Étape")
 
-if st.button("💡 Trouver la meilleure prochaine attraction", type="primary", use_container_width=True):
+if st.button("Trouver la meilleure prochaine attraction", type="primary", use_container_width=True):
     if not st.session_state.attractions_to_visit:
         st.warning("Votre liste d'attractions à visiter est vide.")
     else:
@@ -279,10 +287,10 @@ if st.session_state.last_recommendation:
     with recommendation_placeholder:
         st.success(f"Destination suggérée : **{rec['destination']}** !")
         sub_col1, sub_col2 = st.columns(2)
-        sub_col1.metric("🚶‍♂️ Marche", f"~{rec['real_travel_time']:.0f} min")
-        sub_col2.metric("⏱️ Attente", f"~{rec['real_wait_time_now']:.0f} min")
+        sub_col1.metric("Marche", f"~{rec['real_travel_time']:.0f} min")
+        sub_col2.metric("⏱Attente", f"~{rec['real_wait_time_now']:.0f} min")
         
-        if st.button(f"✅ J'ai fait {rec['destination']}", use_container_width=True):
+        if st.button(f"J'ai fait {rec['destination']}", use_container_width=True):
             last_done = st.session_state.last_recommendation['destination']
             st.session_state.history.append(last_done)
             st.session_state.current_location = last_done
@@ -292,7 +300,7 @@ if st.session_state.last_recommendation:
             st.rerun()
 
 st.markdown("---")
-st.header("🗺️ Carte du Parc")
+st.header("Carte du Parc")
 park_map = create_park_map(
     coords=ATTRACTIONS_COORDS,
     history=st.session_state.history,
@@ -307,7 +315,7 @@ with st.expander(f"Votre Plan ({len(st.session_state.attractions_to_visit)} attr
         for attraction in st.session_state.attractions_to_visit:
             st.markdown(f"- {attraction}")
     else:
-        st.success("🎉 Vous avez fait toutes les attractions de votre liste !")
+        st.success("Vous avez fait toutes les attractions de votre liste !")
 
     if st.session_state.history and len(st.session_state.history) > 1:
         st.markdown("**Parcours effectué :**")
