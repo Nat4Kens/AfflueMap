@@ -1,4 +1,4 @@
-# app.py (Version finale complète - 15/06/2025)
+# app.py (Version modifiée - Affiche uniquement les attractions de la liste)
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -12,7 +12,6 @@ from streamlit_folium import st_folium
 import numpy
 
 # --- CONFIGURATION ET CONSTANTES ---
-
 START_LOCATION_DEFAULT = 'Entree'
 ATTRACTIONS_MASTER_LIST = [
     'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
@@ -50,58 +49,38 @@ COMPLETE_EDGES_UNPONDERED = [
     ('Entree', 'Pirates in Batavia', 20), ('Entree', 'Silver Star', 7), ('Entree', 'Arthur', 18), ('Entree', 'Matterhorn-Blitz', 8),
     ('Entree', 'Eurosat', 8), ('Entree', 'Poseidon', 11), ('Entree', 'Swiss Bob Run', 11), ('Entree', 'Atlantis Adventure', 12), ('Entree', 'Atlantica SuperSplash', 23),
     ('Entree', 'Alpine Express', 20),
-    
     ('Castello dei Medici', 'Entree', 4), ('Castello dei Medici', 'Poseidon', 6), ('Castello dei Medici', 'Eurosat', 3), ('Castello dei Medici', 'Matterhorn-Blitz', 5), 
     ('Castello dei Medici', 'Arthur', 12), ('Castello dei Medici', 'Silver Star', 3), ('Castello dei Medici', 'Pirates in Batavia', 12), ('Castello dei Medici', 'Voletarium', 6), 
     ('Castello dei Medici', 'Euro-Mir', 8), ('Castello dei Medici', 'Wodan', 22), ('Castello dei Medici', 'Voltron Nevera', 8), ('Castello dei Medici', 'Blue Fire', 19), 
-    
     ('Pegasus', 'Entree', 10), ('Pegasus', 'Poseidon', 1), ('Pegasus', 'Eurosat', 4), ('Pegasus', 'Matterhorn-Blitz', 5), 
     ('Pegasus', 'Arthur', 14), ('Pegasus', 'Silver Star', 2), ('Pegasus', 'Pirates in Batavia', 13), ('Pegasus', 'Voletarium', 11), 
     ('Pegasus', 'Euro-Mir', 9), ('Pegasus', 'Wodan', 22), ('Pegasus', 'Voltron Nevera', 7), ('Pegasus', 'Blue Fire', 20), ('Pegasus', 'Castello dei Medici', 5), 
-    
     ('Swiss Bob Run', 'Poseidon', 6), ('Swiss Bob Run', 'Eurosat', 3), ('Swiss Bob Run', 'Matterhorn-Blitz', 1), ('Swiss Bob Run', 'Pegasus', 6), 
     ('Swiss Bob Run', 'Arthur', 9), ('Swiss Bob Run', 'Silver Star', 4), ('Swiss Bob Run', 'Pirates in Batavia', 8), ('Swiss Bob Run', 'Voletarium', 12), 
     ('Swiss Bob Run', 'Euro-Mir', 4), ('Swiss Bob Run', 'Wodan', 18), ('Swiss Bob Run', 'Voltron Nevera', 4), ('Swiss Bob Run', 'Blue Fire', 15), ('Swiss Bob Run', 'Castello dei Medici', 6), 
-    
     ('Atlantis Adventure', 'Poseidon', 5), ('Atlantis Adventure', 'Eurosat', 3), ('Atlantis Adventure', 'Matterhorn-Blitz', 1), ('Atlantis Adventure', 'Pegasus', 6), 
     ('Atlantis Adventure', 'Arthur', 8), ('Atlantis Adventure', 'Silver Star', 5), ('Atlantis Adventure', 'Pirates in Batavia', 7), ('Atlantis Adventure', 'Voletarium', 13), 
     ('Atlantis Adventure', 'Euro-Mir', 3), ('Atlantis Adventure', 'Wodan', 17), ('Atlantis Adventure', 'Voltron Nevera', 1), ('Atlantis Adventure', 'Blue Fire', 14), ('Atlantis Adventure', 'Castello dei Medici', 6),
     ('Atlantis Adventure', 'Swiss Bob Run', 3),
-    
     ('Atlantica SuperSplash', 'Poseidon', 19), ('Atlantica SuperSplash', 'Eurosat', 17), ('Atlantica SuperSplash', 'Matterhorn-Blitz', 15), ('Atlantica SuperSplash', 'Pegasus', 19), 
     ('Atlantica SuperSplash', 'Arthur', 9), ('Atlantica SuperSplash', 'Silver Star', 18), ('Atlantica SuperSplash', 'Pirates in Batavia', 7), ('Atlantica SuperSplash', 'Voletarium', 24), 
     ('Atlantica SuperSplash', 'Euro-Mir', 10), ('Atlantica SuperSplash', 'Wodan', 6), ('Atlantica SuperSplash', 'Voltron Nevera', 15), ('Atlantica SuperSplash', 'Blue Fire', 6), ('Atlantica SuperSplash', 'Castello dei Medici', 18),
     ('Atlantica SuperSplash', 'Swiss Bob Run', 14), ('Atlantica SuperSplash', 'Atlantis Adventure', 13),
-    
     ('Alpine Express', 'Poseidon', 18), ('Alpine Express', 'Eurosat', 16), ('Alpine Express', 'Matterhorn-Blitz', 14), ('Alpine Express', 'Pegasus', 18), 
     ('Alpine Express', 'Arthur', 5), ('Alpine Express', 'Silver Star', 17), ('Alpine Express', 'Pirates in Batavia', 6), ('Alpine Express', 'Voletarium', 23), 
     ('Alpine Express', 'Euro-Mir', 9), ('Alpine Express', 'Wodan', 11), ('Alpine Express', 'Voltron Nevera', 14), ('Alpine Express', 'Blue Fire', 11), ('Alpine Express', 'Castello dei Medici', 17),
     ('Alpine Express', 'Swiss Bob Run', 13), ('Alpine Express', 'Atlantica SuperSplash', 7), ('Alpine Express', 'Atlantis Adventure', 12)
 ]
-
-
-# ==============================================================================
-# === NOUVELLE SECTION : COORDONNÉES GPS DES ATTRACTIONS ===
-# ==============================================================================
 ATTRACTIONS_COORDS = {
-    'Entree': (48.26886239084585, 7.7218611694409045),
-    'Voletarium': (48.26917304513733, 7.722443208799992),
-    'Eurosat': (48.267451577912816, 7.72113123949057),
-    'Silver Star': (48.26779998024085, 7.720126590003773),
-    'Euro-Mir': (48.26507602609998, 7.720178628240745),
-    'Wodan': (48.26138819760847, 7.7192129584382885),
-    'Blue Fire': (48.26265872340149, 7.718827721822693),
-    'Voltron Nevera': (48.2657797944176, 7.719762395202016), # Coordonnées à ajuster
-    'Pirates in Batavia': (48.26358868421831, 7.7204499731581135),
-    'Arthur': (48.26389057631639, 7.723843203049346),
-    'Matterhorn-Blitz': (48.26691168136572, 7.72049900063425),
-    'Poseidon': (48.26666361205288, 7.719339791552477),
-    'Castello dei Medici': (48.26778972322049, 7.7219478107095005), 
-    'Pegasus': (48.267802325534184, 7.719292403563365), 
-    'Swiss Bob Run' : (48.26641724603062, 7.721222909834505), 
-    'Atlantica SuperSplash' : (48.26206292443042, 7.721499320393662), 
-    'Alpine Express' : (48.2621812175191, 7.722749967431886), 
-    'Atlantis Adventure': (48.26622780789098, 7.7202422772430905)
+    'Entree': (48.26886239084585, 7.7218611694409045), 'Voletarium': (48.26917304513733, 7.722443208799992),
+    'Eurosat': (48.267451577912816, 7.72113123949057), 'Silver Star': (48.26779998024085, 7.720126590003773),
+    'Euro-Mir': (48.26507602609998, 7.720178628240745), 'Wodan': (48.26138819760847, 7.7192129584382885),
+    'Blue Fire': (48.26265872340149, 7.718827721822693), 'Voltron Nevera': (48.2657797944176, 7.719762395202016),
+    'Pirates in Batavia': (48.26358868421831, 7.7204499731581135), 'Arthur': (48.26389057631639, 7.723843203049346),
+    'Matterhorn-Blitz': (48.26691168136572, 7.72049900063425), 'Poseidon': (48.26666361205288, 7.719339791552477),
+    'Castello dei Medici': (48.26778972322049, 7.7219478107095005), 'Pegasus': (48.267802325534184, 7.719292403563365),
+    'Swiss Bob Run' : (48.26641724603062, 7.721222909834505), 'Atlantica SuperSplash' : (48.26206292443042, 7.721499320393662),
+    'Alpine Express' : (48.2621812175191, 7.722749967431886), 'Atlantis Adventure': (48.26622780789098, 7.7202422772430905)
 }
 
 # --- FONCTIONS UTILITAIRES ---
@@ -115,6 +94,7 @@ RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
 
 @lru_cache(maxsize=None)
 def fetch_page_content(url: str) -> str:
+    # ... (code de la fonction inchangé)
     try:
         resp = session.get(url, timeout=10)
         resp.raise_for_status()
@@ -122,9 +102,9 @@ def fetch_page_content(url: str) -> str:
     except requests.exceptions.RequestException as e:
         st.error(f"Erreur de réseau en contactant {url}: {e}")
         return ""
-
 @st.cache_data(ttl=300)
 def dernierTemps(attraction: str) -> float:
+    # ... (code de la fonction inchangé)
     url = URLS.get(attraction)
     if not url: return 0.0
     html = fetch_page_content(url)
@@ -142,9 +122,9 @@ def dernierTemps(attraction: str) -> float:
     except (json.JSONDecodeError, IndexError):
         return 0.0
     return 0.0
-
 @st.cache_data(ttl=3600)
 def predire_temps_attente(attraction: str, heure_cible: int, semaine_cible_num: int, jour_cible: str) -> float:
+    # ... (code de la fonction inchangé)
     if not (9 <= heure_cible <= 20): return 0.0
     url = URLS.get(attraction)
     if not url: return 0.0
@@ -162,27 +142,25 @@ def predire_temps_attente(attraction: str, heure_cible: int, semaine_cible_num: 
             except (json.JSONDecodeError, IndexError):
                 return 0.0
     return 0.0
-
 def get_wait_time_ponderation_coefficient(avg_wait, actual_wait):
+    # ... (code de la fonction inchangé)
     if avg_wait is None or actual_wait is None: return 1.0
     diff_wait = avg_wait - actual_wait
     if diff_wait <= 0:
         return 1 + (-diff_wait / 60)**2
     else:
         return actual_wait / avg_wait if avg_wait > 0 else 0.5
-
 def find_best_next_step(current_location, attractions_to_visit, current_time):
+    # ... (code de la fonction inchangé)
     travel_times = defaultdict(lambda: float('inf'))
     for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
         travel_times[(loc1, loc2)] = weight
         travel_times[(loc2, loc1)] = weight
-
     day_mapping = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim']
     semaine_actuelle = current_time.isocalendar()[1] - 1
     jour_actuel_str = day_mapping[current_time.weekday()]
     best_choice_details = None
     lowest_cost = float('inf')
-    
     with st.expander("Voir les détails du calcul"):
         for candidate in attractions_to_visit:
             if candidate == current_location: continue
@@ -197,34 +175,47 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
                 avg_wait=predicted_wait_now, actual_wait=real_current_wait
             )
             total_cost = travel_time * penalty_coefficient
-
             st.markdown(f"--- \n**Candidat : {candidate}**")
             col1, col2, col3 = st.columns(3)
             diff = real_current_wait - predicted_wait_now if predicted_wait_now is not None else 0
-            
             col1.metric("Trajet", f"{travel_time:.0f} min")
             col2.metric("Attente (Réel/Prédit)", f"{real_current_wait:.0f} / {predicted_wait_now or 'N/A':.0f} min",
                         delta=f"{diff:.0f} min", delta_color="inverse")
             col3.metric("Coût", f"{total_cost:.2f}")
-            
             if total_cost < lowest_cost:
                 lowest_cost = total_cost
                 best_choice_details = {
                     "destination": candidate, "from": current_location, "cost": total_cost,
                     "real_travel_time": travel_time, "real_wait_time_now": real_current_wait,
                 }
-    
     return best_choice_details
 
-def create_park_map(coords, history, current_loc, recommendation):
-    avg_lat = sum(c[0] for c in coords.values()) / len(coords)
-    avg_lon = sum(c[1] for c in coords.values()) / len(coords)
-    m = folium.Map(location=[avg_lat, avg_lon], zoom_start=15, tiles="CartoDB positron")
+# --- MODIFICATION DE LA FONCTION create_park_map ---
+def create_park_map(coords, history, current_loc, recommendation, attractions_to_visit):
+    # Créer une liste des points à afficher sur la carte
+    points_to_show = set(attractions_to_visit)
+    points_to_show.add(current_loc)
+    if recommendation:
+        points_to_show.add(recommendation['destination'])
 
+    # Si la liste est vide (sauf la position actuelle), on ne peut pas centrer la carte
+    if not points_to_show:
+        # Centrer sur la position actuelle ou une position par défaut
+        center_coords = coords.get(current_loc, (48.266, 7.721)) # Coordonnées par défaut du parc
+    else:
+        # Centrer la carte sur la moyenne des coordonnées des points à afficher
+        avg_lat = sum(coords[loc][0] for loc in points_to_show if loc in coords) / len(points_to_show)
+        avg_lon = sum(coords[loc][1] for loc in points_to_show if loc in coords) / len(points_to_show)
+        center_coords = (avg_lat, avg_lon)
+
+    m = folium.Map(location=center_coords, zoom_start=16, tiles="CartoDB positron")
+
+    # Dessiner le parcours effectué
     if len(history) > 1:
         path_coords = [coords[loc] for loc in history if loc in coords]
         folium.PolyLine(path_coords, color='blue', weight=4, opacity=0.8, tooltip="Parcours effectué").add_to(m)
 
+    # Dessiner le trajet proposé
     if recommendation:
         start_coord = coords.get(current_loc)
         end_coord = coords.get(recommendation['destination'])
@@ -232,24 +223,26 @@ def create_park_map(coords, history, current_loc, recommendation):
             folium.PolyLine([start_coord, end_coord], color='green', weight=5,
                             dash_array='10', tooltip="Prochain trajet").add_to(m)
 
+    # Placer les points pour chaque attraction FILTRÉE
     for name, location in coords.items():
-        icon_color = 'black'
-        icon_type = 'info-sign'
-        if name == current_loc:
-            icon_color = 'blue'
-            icon_type = 'user'
-        elif recommendation and name == recommendation['destination']:
-            icon_color = 'green'
-            icon_type = 'flag'
-        elif name in history:
-            icon_color = 'purple'
-            icon_type = 'ok-sign'
+        if name in points_to_show:
+            icon_color = 'black'
+            icon_type = 'info-sign'
+            if name == current_loc:
+                icon_color = 'blue'
+                icon_type = 'user'
+            elif recommendation and name == recommendation['destination']:
+                icon_color = 'green'
+                icon_type = 'flag'
+            elif name in history:
+                icon_color = 'purple'
+                icon_type = 'ok-sign'
+                
+            folium.Marker(
+                location=location, popup=name, tooltip=name,
+                icon=folium.Icon(color=icon_color, icon=icon_type, prefix='glyphicon')
+            ).add_to(m)
             
-        folium.Marker(
-            location=location, popup=name, tooltip=name,
-            icon=folium.Icon(color=icon_color, icon=icon_type, prefix='glyphicon')
-        ).add_to(m)
-        
     return m
 
 # --- INTERFACE STREAMLIT ---
@@ -321,7 +314,7 @@ if st.session_state.last_recommendation:
         st.success(f"Destination suggérée : **{rec['destination']}** !")
         sub_col1, sub_col2 = st.columns(2)
         sub_col1.metric("Marche", f"~{rec['real_travel_time']:.0f} min")
-        sub_col2.metric("⏱Attente", f"~{rec['real_wait_time_now']:.0f} min")
+        sub_col2.metric("Attente", f"~{rec['real_wait_time_now']:.0f} min")
         
         if st.button(f"J'ai fait {rec['destination']}", use_container_width=True):
             last_done = st.session_state.last_recommendation['destination']
@@ -334,11 +327,13 @@ if st.session_state.last_recommendation:
 
 st.markdown("---")
 st.header("Carte du Parc")
+# --- MODIFICATION DE L'APPEL DE LA FONCTION ---
 park_map = create_park_map(
     coords=ATTRACTIONS_COORDS,
     history=st.session_state.history,
     current_loc=st.session_state.current_location,
-    recommendation=st.session_state.last_recommendation
+    recommendation=st.session_state.last_recommendation,
+    attractions_to_visit=st.session_state.attractions_to_visit # Nouvel argument
 )
 st_folium(park_map, width='100%', height=400)
 
