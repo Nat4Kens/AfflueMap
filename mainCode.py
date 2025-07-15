@@ -1,27 +1,29 @@
+# mainCode.py (Moteur de calcul)
+
 import re
-import json
 import requests
+import json
 from collections import defaultdict
-import numpy as np
+from functools import lru_cache
 from bs4 import BeautifulSoup
+# --- CONFIGURATION ET CONSTANTES ---
+
+ATTRACTIONS_MASTER_LIST = [
+    'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
+    'Pirates in Batavia', 'Silver Star', 'Arthur', 'Matterhorn-Blitz', 'Eurosat',
+    'Poseidon', 'Castello dei Medici', 'Pegasus', 'Swiss Bob Run',
+    'Atlantica SuperSplash', 'Alpine Express', 'Atlantis Adventure'
+]
 
 URLS = {
-    'Blue Fire': 'https://queue-times.com/fr/parks/51/rides/5603',
-    'Voltron Nevera': 'https://queue-times.com/fr/parks/51/rides/13349',
-    'Wodan': 'https://queue-times.com/fr/parks/51/rides/5602',
-    'Euro-Mir': 'https://queue-times.com/fr/parks/51/rides/5605',
-    'Voletarium': 'https://queue-times.com/fr/parks/51/rides/5630',
-    'Pirates in Batavia': 'https://queue-times.com/fr/parks/51/rides/5617',
-    'Silver Star': 'https://queue-times.com/fr/parks/51/rides/5604',
-    'Arthur': 'https://queue-times.com/fr/parks/51/rides/5618',
-    'Matterhorn-Blitz': 'https://queue-times.com/fr/parks/51/rides/5607',
-    'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
-    'Poseidon': 'https://queue-times.com/fr/parks/51/rides/5611',
-    'Castello dei Medici': 'https://queue-times.com/fr/parks/51/rides/5616',
-    'Pegasus': 'https://queue-times.com/fr/parks/51/rides/5608',
-    'Swiss Bob Run': 'https://queue-times.com/fr/parks/51/rides/5613',
-    'Atlantis Adventure': 'https://queue-times.com/fr/parks/51/rides/5615',
-    'Atlantica SuperSplash': 'https://queue-times.com/fr/parks/51/rides/5610',
+    'Blue Fire': 'https://queue-times.com/fr/parks/51/rides/5603', 'Voltron Nevera': 'https://queue-times.com/fr/parks/51/rides/13349',
+    'Wodan': 'https://queue-times.com/fr/parks/51/rides/5602', 'Euro-Mir': 'https://queue-times.com/fr/parks/51/rides/5605',
+    'Voletarium': 'https://queue-times.com/fr/parks/51/rides/5630', 'Pirates in Batavia': 'https://queue-times.com/fr/parks/51/rides/5617',
+    'Silver Star': 'https://queue-times.com/fr/parks/51/rides/5604', 'Arthur': 'https://queue-times.com/fr/parks/51/rides/5618',
+    'Matterhorn-Blitz': 'https://queue-times.com/fr/parks/51/rides/5607', 'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
+    'Poseidon': 'https://queue-times.com/fr/parks/51/rides/5611', 'Castello dei Medici': 'https://queue-times.com/fr/parks/51/rides/5616',
+    'Pegasus': 'https://queue-times.com/fr/parks/51/rides/5608', 'Swiss Bob Run': 'https://queue-times.com/fr/parks/51/rides/5613',
+    'Atlantis Adventure': 'https://queue-times.com/fr/parks/51/rides/5615', 'Atlantica SuperSplash': 'https://queue-times.com/fr/parks/51/rides/5610',
     'Alpine Express': 'https://queue-times.com/fr/parks/51/rides/5606'
 }
 
@@ -43,56 +45,56 @@ COMPLETE_EDGES_UNPONDERED = [
     ('Entree', 'Voltron Nevera', 13), ('Entree', 'Wodan', 27), ('Entree', 'Euro-Mir', 14), ('Entree', 'Voletarium', 1),
     ('Entree', 'Pirates in Batavia', 20), ('Entree', 'Silver Star', 7), ('Entree', 'Arthur', 18), ('Entree', 'Matterhorn-Blitz', 8),
     ('Entree', 'Eurosat', 8), ('Entree', 'Poseidon', 11), ('Entree', 'Swiss Bob Run', 11), ('Entree', 'Atlantis Adventure', 12), ('Entree', 'Atlantica SuperSplash', 23),
-    ('Entree', 'Alpine Express', 20)
+    ('Entree', 'Alpine Express', 20),
+    ('Castello dei Medici', 'Entree', 4), ('Castello dei Medici', 'Poseidon', 6), ('Castello dei Medici', 'Eurosat', 3), ('Castello dei Medici', 'Matterhorn-Blitz', 5),
+    ('Castello dei Medici', 'Arthur', 12), ('Castello dei Medici', 'Silver Star', 3), ('Castello dei Medici', 'Pirates in Batavia', 12), ('Castello dei Medici', 'Voletarium', 6),
+    ('Castello dei Medici', 'Euro-Mir', 8), ('Castello dei Medici', 'Wodan', 22), ('Castello dei Medici', 'Voltron Nevera', 8), ('Castello dei Medici', 'Blue Fire', 19),
+    ('Pegasus', 'Entree', 10), ('Pegasus', 'Poseidon', 1), ('Pegasus', 'Eurosat', 4), ('Pegasus', 'Matterhorn-Blitz', 5),
+    ('Pegasus', 'Arthur', 14), ('Pegasus', 'Silver Star', 2), ('Pegasus', 'Pirates in Batavia', 13), ('Pegasus', 'Voletarium', 11),
+    ('Pegasus', 'Euro-Mir', 9), ('Pegasus', 'Wodan', 22), ('Pegasus', 'Voltron Nevera', 7), ('Pegasus', 'Blue Fire', 20), ('Pegasus', 'Castello dei Medici', 5),
+    ('Swiss Bob Run', 'Poseidon', 6), ('Swiss Bob Run', 'Eurosat', 3), ('Swiss Bob Run', 'Matterhorn-Blitz', 1), ('Swiss Bob Run', 'Pegasus', 6),
+    ('Swiss Bob Run', 'Arthur', 9), ('Swiss Bob Run', 'Silver Star', 4), ('Swiss Bob Run', 'Pirates in Batavia', 8), ('Swiss Bob Run', 'Voletarium', 12),
+    ('Swiss Bob Run', 'Euro-Mir', 4), ('Swiss Bob Run', 'Wodan', 18), ('Swiss Bob Run', 'Voltron Nevera', 4), ('Swiss Bob Run', 'Blue Fire', 15), ('Swiss Bob Run', 'Castello dei Medici', 6),
+    ('Atlantis Adventure', 'Poseidon', 5), ('Atlantis Adventure', 'Eurosat', 3), ('Atlantis Adventure', 'Matterhorn-Blitz', 1), ('Atlantis Adventure', 'Pegasus', 6),
+    ('Atlantis Adventure', 'Arthur', 8), ('Atlantis Adventure', 'Silver Star', 5), ('Atlantis Adventure', 'Pirates in Batavia', 7), ('Atlantis Adventure', 'Voletarium', 13),
+    ('Atlantis Adventure', 'Euro-Mir', 3), ('Atlantis Adventure', 'Wodan', 17), ('Atlantis Adventure', 'Voltron Nevera', 1), ('Atlantis Adventure', 'Blue Fire', 14), ('Atlantis Adventure', 'Castello dei Medici', 6),
+    ('Atlantis Adventure', 'Swiss Bob Run', 3),
+    ('Atlantica SuperSplash', 'Poseidon', 19), ('Atlantica SuperSplash', 'Eurosat', 17), ('Atlantica SuperSplash', 'Matterhorn-Blitz', 15), ('Atlantica SuperSplash', 'Pegasus', 19),
+    ('Atlantica SuperSplash', 'Arthur', 9), ('Atlantica SuperSplash', 'Silver Star', 18), ('Atlantica SuperSplash', 'Pirates in Batavia', 7), ('Atlantica SuperSplash', 'Voletarium', 24),
+    ('Atlantica SuperSplash', 'Euro-Mir', 10), ('Atlantica SuperSplash', 'Wodan', 6), ('Atlantica SuperSplash', 'Voltron Nevera', 15), ('Atlantica SuperSplash', 'Blue Fire', 6), ('Atlantica SuperSplash', 'Castello dei Medici', 18),
+    ('Atlantica SuperSplash', 'Swiss Bob Run', 14), ('Atlantica SuperSplash', 'Atlantis Adventure', 13),
+    ('Alpine Express', 'Poseidon', 18), ('Alpine Express', 'Eurosat', 16), ('Alpine Express', 'Matterhorn-Blitz', 14), ('Alpine Express', 'Pegasus', 18),
+    ('Alpine Express', 'Arthur', 5), ('Alpine Express', 'Silver Star', 17), ('Alpine Express', 'Pirates in Batavia', 6), ('Alpine Express', 'Voletarium', 23),
+    ('Alpine Express', 'Euro-Mir', 9), ('Alpine Express', 'Wodan', 11), ('Alpine Express', 'Voltron Nevera', 14), ('Alpine Express', 'Blue Fire', 11), ('Alpine Express', 'Castello dei Medici', 17),
+    ('Alpine Express', 'Swiss Bob Run', 13), ('Alpine Express', 'Atlantica SuperSplash', 7), ('Alpine Express', 'Atlantis Adventure', 12)
 ]
 
-travel_times_from_to = defaultdict(lambda: float('inf'))
-for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
-    travel_times_from_to[(loc1, loc2)] = weight
-    travel_times_from_to[(loc2, loc1)] = weight
+ATTRACTIONS_COORDS = {
+    'Entree': (48.26886239084585, 7.7218611694409045), 'Voletarium': (48.26917304513733, 7.722443208799992),
+    'Eurosat': (48.267451577912816, 7.72113123949057), 'Silver Star': (48.26779998024085, 7.720126590003773),
+    'Euro-Mir': (48.26507602609998, 7.720178628240745), 'Wodan': (48.26138819760847, 7.7192129584382885),
+    'Blue Fire': (48.26265872340149, 7.718827721822693), 'Voltron Nevera': (48.2657797944176, 7.719762395202016),
+    'Pirates in Batavia': (48.26358868421831, 7.7204499731581135), 'Arthur': (48.26389057631639, 7.723843203049346),
+    'Matterhorn-Blitz': (48.26691168136572, 7.72049900063425), 'Poseidon': (48.26666361205288, 7.719339791552477),
+    'Castello dei Medici': (48.26778972322049, 7.7219478107095005), 'Pegasus': (48.267802325534184, 7.719292403563365),
+    'Swiss Bob Run' : (48.26641724603062, 7.721222909834505), 'Atlantica SuperSplash' : (48.26206292443042, 7.721499320393662),
+    'Alpine Express' : (48.2621812175191, 7.722749967431886), 'Atlantis Adventure': (48.26622780789098, 7.7202422772430905)
+}
+
+# --- FONCTIONS DE CALCUL ---
+
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+})
 
 RE_CHART_SCRIPT = re.compile(r"var createChart = function")
-RE_JSON_DATA = re.compile(r'\[{"name":.*?}\]', re.DOTALL)
+RE_JSON_DATA = re.compile(r"\[\{\"name\":.*?\}\]", re.DOTALL)
+RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
 
-dernierTemps = None
-session = None
-
-def login_and_get_session(username, password):
-    global session
-    if session:
-        return session
-
-    LOGIN_URL = 'https://queue-times.com/fr/users/sign_in'
-    local_session = requests.Session()
-    try:
-        login_page = local_session.get(LOGIN_URL, timeout=10)
-        login_page.raise_for_status()
-        soup = BeautifulSoup(login_page.text, 'html.parser')
-        token_element = soup.find('input', {'name': 'authenticity_token'})
-        if not token_element:
-            raise ValueError("Jeton d'authenticité non trouvé.")
-        token = token_element.get('value')
-    except (requests.RequestException, ValueError) as e:
-        print(f"Erreur lors de la récupération du jeton de sécurité : {e}")
-        return None
-
-    login_data = {
-        'authenticity_token': token,
-        'user[email]': username,
-        'user[password]': password,
-        'commit': 'Se connecter'
-    }
-    response = local_session.post(LOGIN_URL, data=login_data)
-
-    if response.ok and "Déconnexion" in response.text:
-        print("Connexion réussie !")
-        session = local_session
-        return session
-    else:
-        print("Échec de la connexion. Vérifiez vos identifiants.")
-        return None
-
-def fetch_page_content(url):
+@lru_cache(maxsize=None)
+def fetch_page_content(url: str) -> str:
+    """Fetches the content of a URL and caches the result."""
     try:
         resp = session.get(url, timeout=10)
         resp.raise_for_status()
@@ -101,61 +103,99 @@ def fetch_page_content(url):
         print(f"Erreur de réseau en contactant {url}: {e}")
         return ""
 
+def get_actual_wait_time(attraction: str) -> float:
+    """Gets the last reported wait time for an attraction."""
+    url = URLS.get(attraction)
+    if not url: return 0.0
+    html = fetch_page_content(url)
+    if not html: return 0.0
+    soup = BeautifulSoup(html, 'html.parser')
+    script = soup.find('script', string=RE_CHART_SCRIPT)
+    if not script: return 0.0
+    match = RE_JSON_DATA.search(script.string)
+    if not match: return 0.0
+    try:
+        data = json.loads(match.group())
+        for series in data:
+            if series['name'] == 'Signalé par le parc' and series['data']:
+                return float(series['data'][-1][1])
+    except (json.JSONDecodeError, IndexError):
+        return 0.0
+    return 0.0
+
+def get_predicted_wait_time(attraction: str, target_hour: int) -> float:
+    """Predicts wait time for a given hour based on historical data."""
+    if not (9 <= target_hour <= 20): return 0.0
+    url = URLS.get(attraction)
+    if not url: return 0.0
+    html_content = fetch_page_content(url)
+    if not html_content: return 0.0
+    soup = BeautifulSoup(html_content, 'html.parser')
+    script_chart5_tag = soup.find('script', string=lambda t: t and 'chart-5' in t)
+    if script_chart5_tag and script_chart5_tag.string:
+        match_chart5 = RE_MONTH_CHART.search(script_chart5_tag.string)
+        if match_chart5:
+            try:
+                hourly_raw_data = json.loads(f'[{{"data":{match_chart5.group(1)}}}]')[0]["data"]
+                hourly_pattern_map = {int(e[0]): float(e[1]) for e in hourly_raw_data if e[1] is not None}
+                return hourly_pattern_map.get(target_hour, 0.0)
+            except (json.JSONDecodeError, IndexError):
+                return 0.0
+    return 0.0
+
 def get_wait_time_ponderation_coefficient(avg_wait, actual_wait):
-    """
-    Calcule un coefficient qui représente la 'qualité' de l'opportunité.
-    Cette fonction utilise la stratégie optimisée "Gain Mixte".
-    Elle se base sur le ratio (gain relatif) et y ajoute un bonus
-    proportionnel au nombre de minutes réelles économisées (gain absolu).
-    """
+    """Calculates a coefficient representing the opportunity 'quality'."""
     if avg_wait is None or actual_wait is None or avg_wait <= 5:
         return 1.0
-
     diff_wait = avg_wait - actual_wait
-
-    if diff_wait <= 0:  # Le temps est pire que la moyenne -> Pénalité
+    if diff_wait <= 0:
         return 1 + (-diff_wait / 60)**2
-    else:  # Bonne opportunité -> Récompense
-        # Récompense de base sur le ratio
+    else:
         base_reward = actual_wait / avg_wait
-        
-        # Bonus supplémentaire basé sur le gain absolu de temps (normalisé)
         absolute_gain_bonus = diff_wait / 60.0
-        
-        # Le nouveau coefficient est le ratio de base, auquel on soustrait le bonus.
-        # Plus on gagne de minutes, plus le coefficient baisse.
         final_coefficient = base_reward - absolute_gain_bonus
-        
-        return max(0.01, final_coefficient) # On s'assure de ne pas avoir un coût négatif
+        return max(0.01, final_coefficient)
 
+def find_best_next_step(current_location, attractions_to_visit, current_time):
+    """
+    Analyzes all possible next attractions and returns the best one, along with details for all candidates.
+    """
+    travel_times = defaultdict(lambda: float('inf'))
+    for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
+        travel_times[(loc1, loc2)] = weight
+        travel_times[(loc2, loc1)] = weight
 
-def find_best_next_step(current_location, attractions_to_visit, travel_times_edges, current_time, verbose=False):
-    best_choice_score = float('inf')
+    all_candidates_details = []
     best_choice_details = None
+    lowest_cost = float('inf')
 
-    for attraction_name in attractions_to_visit:
-        travel_time = travel_times_edges.get((current_location, attraction_name), float('inf'))
-        if travel_time == float('inf'):
-            continue
+    for candidate in attractions_to_visit:
+        if candidate == current_location: continue
+        
+        travel_time = travel_times.get((current_location, candidate), float('inf'))
+        if travel_time == float('inf'): continue
 
-        actual_wait = dernierTemps(attraction_name)
-        avg_wait = 30 + 25 * np.sin((current_time.hour - 9) * np.pi / 8)
-
-        penalty_coefficient = get_wait_time_ponderation_coefficient(avg_wait, actual_wait)
+        real_current_wait = get_actual_wait_time(candidate)
+        predicted_wait_now = get_predicted_wait_time(
+            attraction=candidate, target_hour=current_time.hour
+        )
+        
+        penalty_coefficient = get_wait_time_ponderation_coefficient(
+            avg_wait=predicted_wait_now, actual_wait=real_current_wait
+        )
         total_cost = travel_time * penalty_coefficient
 
-        if total_cost < best_choice_score:
-            best_choice_score = total_cost
-            best_choice_details = {
-                "destination": attraction_name,
-                "travel_time": travel_time,
-                "current_wait": actual_wait,
-                "score": total_cost,
-                "avg_wait": avg_wait,
-            }
-    
-    if verbose and best_choice_details:
-        print(f"Meilleur choix : {best_choice_details['destination']} (Score: {best_choice_details['score']:.2f}, "
-              f"Attente: {best_choice_details['current_wait']}min, Trajet: {best_choice_details['travel_time']}min)")
+        candidate_details = {
+            "destination": candidate,
+            "travel_time": travel_time,
+            "real_wait_time": real_current_wait,
+            "predicted_wait_time": predicted_wait_now,
+            "cost": total_cost
+        }
+        all_candidates_details.append(candidate_details)
 
-    return best_choice_details
+        if total_cost < lowest_cost:
+            lowest_cost = total_cost
+            best_choice_details = candidate_details
+            
+    return best_choice_details, all_candidates_details
