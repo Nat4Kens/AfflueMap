@@ -5,7 +5,7 @@ import folium
 from streamlit_folium import st_folium
 
 # --- IMPORTATION DU MOTEUR DE CALCUL ---
-# Toute la logique de calcul est maintenant dans mainCode.py
+# Toute la logique de calcul est dans mainCode.py
 import mainCode
 
 # --- CONFIGURATION ET CONSTANTES PROPRES À L'INTERFACE ---
