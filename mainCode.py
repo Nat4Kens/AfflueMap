@@ -143,22 +143,39 @@ def get_predicted_wait_time(attraction: str, target_hour: int) -> float:
                 return 0.0
     return 0.0
 
-def get_wait_time_ponderation_coefficient(avg_wait, actual_wait):
-    """Calculates a coefficient representing the opportunity 'quality'."""
+def calculer_facteur_opportunite(actual_wait, avg_wait):
+    """
+    Calcule un facteur d'opportunité en utilisant une loi de puissance
+    avec des exposants différents pour la récompense et la pénalité.
+    """
+    # --- Constantes de la stratégie ---
+    # Exposant pour la récompense. > 1 rend la récompense plus forte.
+    P_RECOMPENSE = 2
+    # Exposant pour la pénalité. > 1 rend la pénalité plus forte.
+    P_PENALITE = 3 
+    
+    # --- Sécurité et cas par défaut ---
     if avg_wait is None or actual_wait is None or avg_wait <= 5:
         return 1.0
-    diff_wait = avg_wait - actual_wait
-    if diff_wait <= 0:
-        return 1 + (-diff_wait / 60)**2
+
+    # Le ratio est la base de notre calcul
+    ratio = actual_wait / avg_wait
+    
+    # --- Logique de puissance double ---
+    if ratio <= 1:
+        # Cas Récompense : on applique la puissance de récompense
+        facteur = ratio ** P_RECOMPENSE
     else:
-        base_reward = actual_wait / avg_wait
-        absolute_gain_bonus = diff_wait / 60.0
-        final_coefficient = base_reward - absolute_gain_bonus
-        return max(0.01, final_coefficient)
+        # Cas Pénalité : on applique la puissance de pénalité
+        facteur = ratio ** P_PENALITE
+    
+    # --- Plafonnement (clamping) ---
+    return max(0.1, min(facteur, 5.0))
 
 def find_best_next_step(current_location, attractions_to_visit, current_time):
     """
-    Analyzes all possible next attractions and returns the best one, along with details for all candidates.
+    Analyse les attractions en utilisant un coût où le temps de marche est fixe
+    et seul le temps d'attente est pondéré par le facteur d'opportunité.
     """
     travel_times = defaultdict(lambda: float('inf'))
     for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
@@ -170,32 +187,35 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
     lowest_cost = float('inf')
 
     for candidate in attractions_to_visit:
-        if candidate == current_location: continue
+        if candidate == current_location:
+            continue
         
-        travel_time = travel_times.get((current_location, candidate), float('inf'))
-        if travel_time == float('inf'): continue
-
+        travel_time = travel_times.get((current_location, candidate), 30)
         real_current_wait = get_actual_wait_time(candidate)
         predicted_wait_now = get_predicted_wait_time(
             attraction=candidate, target_hour=current_time.hour
         )
-        
-        penalty_coefficient = get_wait_time_ponderation_coefficient(
-            avg_wait=predicted_wait_now, actual_wait=real_current_wait
+                
+        facteur_opportunite = calculer_facteur_opportunite(
+            actual_wait=real_current_wait,
+            avg_wait=predicted_wait_now
         )
-        total_cost = travel_time * penalty_coefficient
+        
+        wait_time_pondered = real_current_wait * facteur_opportunite
+        
+        final_cost = travel_time + wait_time_pondered
 
         candidate_details = {
             "destination": candidate,
             "travel_time": travel_time,
             "real_wait_time": real_current_wait,
             "predicted_wait_time": predicted_wait_now,
-            "cost": total_cost
+            "cost": final_cost
         }
         all_candidates_details.append(candidate_details)
 
-        if total_cost < lowest_cost:
-            lowest_cost = total_cost
+        if final_cost < lowest_cost:
+            lowest_cost = final_cost
             best_choice_details = candidate_details
             
     return best_choice_details, all_candidates_details
