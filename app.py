@@ -28,7 +28,7 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit):
         avg_lon = sum(coords[loc][1] for loc in valid_points) / len(valid_points)
         center_coords = (avg_lat, avg_lon)
 
-    m = folium.Map(location=center_coords, zoom_start=16, tiles="CartoDB positron")
+    m = folium.Map(location=center_coords, zoom_start=15, tiles="CartoDB positron")
 
     # Affiche le parcours déjà effectué
     if len(history) > 1:
