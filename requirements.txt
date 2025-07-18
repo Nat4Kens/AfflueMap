@@ -4,3 +4,8 @@ beautifulsoup4
 folium
 streamlit-folium
 numpy
+json
+re
+collections
+functools
+datetime
