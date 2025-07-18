@@ -201,8 +201,10 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
             avg_wait=predicted_wait_now
         )
         
+        # 2. On pondère UNIQUEMENT le temps d'attente
         wait_time_pondered = real_current_wait * facteur_opportunite
         
+        # 3. Le coût final est la somme du temps de marche réel et de l'attente pondérée
         final_cost = travel_time + wait_time_pondered
 
         candidate_details = {
