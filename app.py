@@ -1,6 +1,7 @@
 # app.py (Interface Streamlit utilisant le moteur de calcul)
 import streamlit as st
 from datetime import datetime
+import pytz
 import folium
 from streamlit_folium import st_folium
 import mainCode # Importe notre moteur de calcul
@@ -114,7 +115,8 @@ if st.button("Trouver la meilleure prochaine attraction", type="primary", use_co
         st.warning("Votre liste d'attractions à visiter est vide.")
     else:
         with st.spinner("Analyse en cours..."):
-            now = datetime.now()
+            fuseau_horaire_parc = pytz.timezone('Europe/Berlin')
+            now = datetime.now(fuseau_horaire_parc)
             recommendation, all_candidates = mainCode.find_best_next_step(
                 st.session_state.current_location,
                 st.session_state.attractions_to_visit,
