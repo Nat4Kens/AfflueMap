@@ -4,6 +4,4 @@ beautifulsoup4
 folium
 streamlit-folium
 numpy
-collections
-functools
-datetime
+pandas
