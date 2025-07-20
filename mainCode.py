@@ -195,7 +195,10 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
         predicted_wait_now = get_predicted_wait_time(
             attraction=candidate, target_hour=current_time.hour
         )
-                
+        
+        # --- NOUVELLE LOGIQUE DE CALCUL DU COÛT (VOTRE SUGGESTION) ---
+        
+        # 1. On calcule le facteur d'opportunité comme avant
         facteur_opportunite = calculer_facteur_opportunite(
             actual_wait=real_current_wait,
             avg_wait=predicted_wait_now
@@ -206,6 +209,8 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
         
         # 3. Le coût final est la somme du temps de marche réel et de l'attente pondérée
         final_cost = travel_time + wait_time_pondered
+
+        # --- FIN DE LA LOGIQUE ---
 
         candidate_details = {
             "destination": candidate,
