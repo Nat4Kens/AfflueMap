@@ -22,7 +22,7 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit):
 
     # Centre la carte sur les points pertinents
     if not points_to_show or all(loc not in coords for loc in points_to_show):
-        center_coords = (48.266, 7.721) # Coordonnées par défaut
+        center_coords = (48.266, 7.721) # Coordonnées par défaut (Europa-Park)
     else:
         valid_points = [loc for loc in points_to_show if loc in coords]
         avg_lat = sum(coords[loc][0] for loc in valid_points) / len(valid_points)
@@ -62,25 +62,63 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit):
             ).add_to(m)
     return m
 
-# --- INITIALISATION DE L'ÉTAT DE LA SESSION ---
-if 'attractions_to_visit' not in st.session_state:
-    st.session_state.attractions_to_visit = mainCode.ATTRACTIONS_MASTER_LIST.copy()
-if 'current_location' not in st.session_state:
-    st.session_state.current_location = START_LOCATION_DEFAULT
-if 'last_recommendation' not in st.session_state:
+# --- FONCTION UTILITAIRE POUR LA GESTION DE L'ÉTAT ---
+
+def update_url_state():
+    """Met à jour les paramètres de l'URL avec l'état actuel de la session."""
+    st.query_params["history"] = ",".join(st.session_state.history)
+    st.query_params["attractions_to_visit"] = ",".join(st.session_state.attractions_to_visit)
+
+
+# --- INITIALISATION DE L'ÉTAT DE LA SESSION (MODIFIÉ POUR UTILISER L'URL) ---
+
+# La clé 'initialized' évite de réinitialiser l'état à chaque interaction.
+if 'initialized' not in st.session_state:
+    params = st.query_params.to_dict()
+    
+    # Charge l'historique depuis l'URL, ou commence à l'entrée par défaut.
+    history_from_url = params.get('history', START_LOCATION_DEFAULT).split(',')
+    
+    # Charge la liste d'attractions depuis l'URL.
+    # Si vide, on prendra la liste complète.
+    attractions_from_url_raw = params.get('attractions_to_visit', "")
+    attractions_from_url = attractions_from_url_raw.split(',') if attractions_from_url_raw else []
+
+    st.session_state.history = history_from_url
+    st.session_state.current_location = st.session_state.history[-1]
+
+    # Si l'URL contenait une liste d'attractions, on l'utilise. Sinon, on prend la liste par défaut.
+    if attractions_from_url:
+         st.session_state.attractions_to_visit = attractions_from_url
+    else:
+        st.session_state.attractions_to_visit = mainCode.ATTRACTIONS_MASTER_LIST.copy()
+
+    # Nettoyage final : s'assure que les attractions déjà dans l'historique 
+    # ne sont pas dans la liste des attractions à visiter.
+    st.session_state.attractions_to_visit = [
+        attr for attr in st.session_state.attractions_to_visit if attr not in st.session_state.history
+    ]
+    
+    # Initialise les autres variables d'état
     st.session_state.last_recommendation = None
-if 'all_candidates' not in st.session_state:
     st.session_state.all_candidates = None
-if 'history' not in st.session_state:
-    st.session_state.history = [START_LOCATION_DEFAULT]
+    
+    # Marque la session comme initialisée
+    st.session_state.initialized = True
+    
+    # S'assure que l'URL est synchronisée au premier chargement
+    update_url_state()
+
 
 # --- INTERFACE PRINCIPALE ---
 
 st.title("Optimiseur AfflueMap")
 
-# --- BARRE LATÉRALE DE CONFIGURATION ---
+# --- BARRE LATÉRALE DE CONFIGURATION (MODIFIÉE) ---
 with st.sidebar:
     st.header("Configuration")
+    
+    # La sélection met à jour l'état et l'URL
     selected_attractions = st.multiselect(
         "Attractions sur votre liste",
         options=mainCode.ATTRACTIONS_MASTER_LIST,
@@ -88,26 +126,19 @@ with st.sidebar:
     )
     if selected_attractions != st.session_state.attractions_to_visit:
         st.session_state.attractions_to_visit = selected_attractions
+        update_url_state()
         st.rerun()
 
-    possible_locations = [START_LOCATION_DEFAULT] + mainCode.ATTRACTIONS_MASTER_LIST
-    current_location_selection = st.selectbox(
-        "Position actuelle",
-        options=possible_locations,
-        index=possible_locations.index(st.session_state.current_location)
-    )
-    if current_location_selection != st.session_state.current_location:
-        st.session_state.current_location = current_location_selection
-        st.session_state.history = [current_location_selection] # Réinitialise l'historique si on change de lieu manuellement
-        st.rerun()
-
-    st.info(f"**Position :** {st.session_state.current_location}")
+    # La position actuelle est déduite de l'historique, on l'affiche simplement
+    st.info(f"**Position actuelle :** {st.session_state.current_location}")
 
     if st.button("Réinitialiser la journée"):
+        # Vide l'état de la session
         for key in list(st.session_state.keys()): del st.session_state[key]
+        # Vide aussi les paramètres de l'URL pour un redémarrage propre
+        st.query_params.clear()
         st.rerun()
 
-# --- SECTION PRINCIPALE : RECOMMANDATION ---
 st.header("Prochaine Étape")
 
 if st.button("Trouver la meilleure prochaine attraction", type="primary", use_container_width=True):
@@ -141,9 +172,14 @@ if st.session_state.last_recommendation:
             st.session_state.current_location = last_done
             if last_done in st.session_state.attractions_to_visit:
                 st.session_state.attractions_to_visit.remove(last_done)
+            
             # Réinitialiser les recommandations pour forcer un nouveau calcul
             st.session_state.last_recommendation = None
             st.session_state.all_candidates = None
+            
+            # Mettre à jour l'URL avec le nouvel état
+            update_url_state()
+            
             st.rerun()
 
 # Affiche les détails du calcul si disponibles
