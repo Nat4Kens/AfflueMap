@@ -11,7 +11,7 @@ from streamlit_geolocation import streamlit_geolocation
 st.set_page_config(layout="wide", page_title="Optimiseur de Parc")
 START_LOCATION_DEFAULT = 'Entree'
 
-# --- FONCTIONS D'AFFICHAGE (Réactivées) ---
+# --- FONCTIONS D'AFFICHAGE ---
 
 def create_park_map(history, current_loc, recommendation, attractions_to_visit):
     """Crée et affiche la carte du parc avec le parcours et la recommandation."""
@@ -123,6 +123,11 @@ if location_data and location_data.get('latitude') is not None:
 
     # --- BARRE LATÉRALE DE CONFIGURATION ---
     with st.sidebar:
+        st.header("Soutenir le projet")
+        st.write("Si cet outil vous est utile, vous pouvez m'aider à le développer")
+        st.link_button("Soutenir", "https://www.buymeacoffee.com/nat4K", use_container_width=True)
+        
+        st.markdown("---")
         st.header("Configuration")
         
         selected_attractions = st.multiselect(
@@ -136,9 +141,9 @@ if location_data and location_data.get('latitude') is not None:
             st.rerun()
 
         st.markdown("---")
-        st.info(f"**📍 Position de départ pour le calcul :**\n\n**{st.session_state.current_location}**")
+        st.info(f"** Position de départ :**\n\n**{st.session_state.current_location}**")
         
-        if st.button("🔄 Actualiser ma position", help="Utilise votre GPS pour trouver l'attraction la plus proche et l'utiliser comme nouveau point de départ."):
+        if st.button("Actualiser ma position", help="Utilise votre GPS pour trouver l'attraction la plus proche et l'utiliser comme nouveau point de départ."):
             closest = find_closest_attraction(location_data['latitude'], location_data['longitude'])
             st.session_state.current_location = closest
             st.toast(f"Position actualisée : {closest}", icon="🔄")
@@ -234,4 +239,5 @@ if location_data and location_data.get('latitude') is not None:
 else:
     st.warning("En attente de l'autorisation de géolocalisation...")
     st.info("Veuillez autoriser l'accès à votre position dans votre navigateur (vous devrez peut-être cliquer sur l'icône de boussole) pour démarrer l'application.")
+
 
