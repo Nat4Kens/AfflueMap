@@ -1,5 +1,4 @@
 # mainCode.py (Moteur de calcul)
-
 import re
 import requests
 import json
@@ -174,50 +173,59 @@ def calculer_facteur_opportunite(actual_wait, avg_wait):
 
 def find_best_next_step(current_location, attractions_to_visit, current_time):
     """
-    Analyse les attractions en utilisant un coût où le temps de marche est fixe
-    et seul le temps d'attente est pondéré par le facteur d'opportunité.
+    Analyse les attractions en utilisant un TEMPS DE RÉFÉRENCE DYNAMIQUE,
+    et en considérant la position actuelle comme une destination possible avec un temps de trajet nul.
     """
     travel_times = defaultdict(lambda: float('inf'))
     for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
         travel_times[(loc1, loc2)] = weight
         travel_times[(loc2, loc1)] = weight
 
+    # --- ÉTAPE 1 : CALCUL DU TEMPS DE RÉFÉRENCE DYNAMIQUE ---
+    predicted_waits_for_context = []
+    for attraction in attractions_to_visit:
+        predicted_wait = get_predicted_wait_time(attraction=attraction, target_hour=current_time.hour)
+        if predicted_wait > 0:
+            predicted_waits_for_context.append(predicted_wait)
+
+    if predicted_waits_for_context:
+        TEMPS_ATTENTE_REFERENCE = sum(predicted_waits_for_context) / len(predicted_waits_for_context)
+    else:
+        TEMPS_ATTENTE_REFERENCE = 30 
+
+    # --- ÉTAPE 2 : CALCUL DU COÛT POUR CHAQUE CANDIDAT (LOGIQUE CORRIGÉE) ---
     all_candidates_details = []
     best_choice_details = None
     lowest_cost = float('inf')
 
     for candidate in attractions_to_visit:
-        if candidate == current_location:
-            continue
         
-        travel_time = travel_times.get((current_location, candidate), 30)
+        # --- CORRECTION APPLIQUÉE ICI ---
+        # Si le candidat est notre position actuelle, le temps de trajet est de 0.
+        if candidate == current_location:
+            travel_time = 0.0
+        else:
+            # Sinon, on cherche le temps de marche dans notre graphe.
+            travel_time = travel_times.get((current_location, candidate), 30) # 30 est une valeur de secours
+        # --- FIN DE LA CORRECTION ---
+
         real_current_wait = get_actual_wait_time(candidate)
         predicted_wait_now = get_predicted_wait_time(
             attraction=candidate, target_hour=current_time.hour
         )
         
-        # --- NOUVELLE LOGIQUE DE CALCUL DU COÛT (VOTRE SUGGESTION) ---
-        
-        # 1. On calcule le facteur d'opportunité comme avant
         facteur_opportunite = calculer_facteur_opportunite(
             actual_wait=real_current_wait,
             avg_wait=predicted_wait_now
         )
         
-        # 2. On pondère UNIQUEMENT le temps d'attente
-        wait_time_pondered = real_current_wait * facteur_opportunite
-        
-        # 3. Le coût final est la somme du temps de marche réel et de l'attente pondérée
-        final_cost = travel_time + wait_time_pondered
-
-        # --- FIN DE LA LOGIQUE ---
+        opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
+        final_cost = travel_time + opportunity_cost
 
         candidate_details = {
-            "destination": candidate,
-            "travel_time": travel_time,
-            "real_wait_time": real_current_wait,
-            "predicted_wait_time": predicted_wait_now,
-            "cost": final_cost
+            "destination": candidate, "travel_time": travel_time,
+            "real_wait_time": real_current_wait, "predicted_wait_time": predicted_wait_now,
+            "cost": final_cost, "temps_reference_utilise": TEMPS_ATTENTE_REFERENCE
         }
         all_candidates_details.append(candidate_details)
 
