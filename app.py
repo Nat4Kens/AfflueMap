@@ -6,7 +6,6 @@ import folium
 from streamlit_folium import st_folium
 import mainCode # Importe notre moteur de calcul
 from streamlit_geolocation import streamlit_geolocation
-import math 
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(layout="wide", page_title="Optimiseur de Parc")
@@ -235,3 +234,4 @@ if location_data and location_data.get('latitude') is not None:
 else:
     st.warning("En attente de l'autorisation de géolocalisation...")
     st.info("Veuillez autoriser l'accès à votre position dans votre navigateur (vous devrez peut-être cliquer sur l'icône de boussole) pour démarrer l'application.")
+
