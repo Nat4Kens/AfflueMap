@@ -148,9 +148,7 @@ def calculer_facteur_opportunite(actual_wait, avg_wait):
     avec des exposants différents pour la récompense et la pénalité.
     """
     # --- Constantes de la stratégie ---
-    # Exposant pour la récompense. > 1 rend la récompense plus forte.
     P_RECOMPENSE = 2
-    # Exposant pour la pénalité. > 1 rend la pénalité plus forte.
     P_PENALITE = 3 
     
     # --- Sécurité et cas par défaut ---
