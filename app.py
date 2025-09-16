@@ -175,8 +175,17 @@ if location_data and location_data.get('latitude') is not None:
         with recommendation_placeholder:
             st.success(f"Destination suggérée : **{rec['destination']}** !")
             sub_col1, sub_col2 = st.columns(2)
+            
+            # Début de la modification : Gère l'affichage pour les attractions fermées
+            real_wait = rec['real_wait_time']
+            if real_wait == "CLOSED":
+                wait_display = "Fermé"
+            else:
+                wait_display = f"~{real_wait:.0f} min"
+            # Fin de la modification
+
             sub_col1.metric("Marche", f"~{rec['travel_time']:.0f} min")
-            sub_col2.metric("Attente", f"~{rec['real_wait_time']:.0f} min")
+            sub_col2.metric("Attente", wait_display)
 
             if st.button(f"J'ai fait {rec['destination']}", use_container_width=True):
                 last_done = st.session_state.last_recommendation['destination']
@@ -197,14 +206,30 @@ if location_data and location_data.get('latitude') is not None:
                 st.markdown(f"--- \n**Candidat : {candidate['destination']}**")
                 col1, col2, col3 = st.columns(3)
                 
-                predicted_display = f"{candidate['predicted_wait_time']:.0f}" if candidate['predicted_wait_time'] is not None else "N/A"
-                metric_value = f"{candidate['real_wait_time']:.0f} / {predicted_display} min"
-                diff = candidate['real_wait_time'] - candidate['predicted_wait_time'] if candidate['predicted_wait_time'] is not None else 0
-    
+                # Début de la modification : Logique robuste pour l'affichage des détails
+                real_wait = candidate['real_wait_time']
+                predicted_wait = candidate['predicted_wait_time']
+
+                if real_wait == "CLOSED":
+                    metric_value = "Fermé"
+                    delta_value = None
+                    delta_color = "off"
+                else:
+                    predicted_display = f"{predicted_wait:.0f}" if isinstance(predicted_wait, (int, float)) else "N/A"
+                    metric_value = f"{real_wait:.0f} / {predicted_display} min"
+                    
+                    if isinstance(predicted_wait, (int, float)):
+                        diff = real_wait - predicted_wait
+                        delta_value = f"{diff:.0f} min"
+                    else:
+                        delta_value = None
+                    delta_color = "inverse"
+                # Fin de la modification
+
                 col1.metric("Trajet", f"{candidate['travel_time']:.0f} min")
                 col2.metric("Attente (Réel/Prédit)", metric_value,
-                            delta=f"{diff:.0f} min", delta_color="inverse")
-                col3.metric("Coût", f"{candidate['cost']:.2f}")
+                            delta=delta_value, delta_color=delta_color)
+                col3.metric("Coût", f"{candidate['cost']:.2f}" if candidate['cost'] != float('inf') else "N/A")
     
     st.markdown("---")
 
@@ -235,5 +260,3 @@ if location_data and location_data.get('latitude') is not None:
 else:
     st.warning("En attente de l'autorisation de géolocalisation...")
     st.info("Veuillez autoriser l'accès à votre position dans votre navigateur (vous devrez peut-être cliquer sur l'icône de boussole) pour démarrer l'application.")
-
-
