@@ -5,6 +5,8 @@ import json
 from collections import defaultdict
 from functools import lru_cache
 from bs4 import BeautifulSoup
+from datetime import datetime
+
 # --- CONFIGURATION ET CONSTANTES ---
 
 ATTRACTIONS_MASTER_LIST = [
@@ -102,24 +104,51 @@ def fetch_page_content(url: str) -> str:
         print(f"Erreur de réseau en contactant {url}: {e}")
         return ""
 
-def get_actual_wait_time(attraction: str) -> float:
+def get_actual_wait_time(attraction: str):
     """Gets the last reported wait time for an attraction."""
     url = URLS.get(attraction)
-    if not url: return 0.0
+    if not url:
+        return 0.0
     html = fetch_page_content(url)
-    if not html: return 0.0
+    if not html:
+        return 0.0
     soup = BeautifulSoup(html, 'html.parser')
     script = soup.find('script', string=RE_CHART_SCRIPT)
-    if not script: return 0.0
+    if not script:
+        return 0.0
     match = RE_JSON_DATA.search(script.string)
-    if not match: return 0.0
+    if not match:
+        return 0.0
     try:
         data = json.loads(match.group())
+        
+        last_closed_time = None
+        last_open_time = None
+        wait_time = 0.0
+
         for series in data:
+            if series['name'] == 'Signalé fermé par le parc' and series['data']:
+                last_closed_time_str = series['data'][-1][0]
+                last_closed_time = datetime.strptime(last_closed_time_str, '%m/%d/%y %H:%M:%S')
+
             if series['name'] == 'Signalé par le parc' and series['data']:
-                return float(series['data'][-1][1])
-    except (json.JSONDecodeError, IndexError):
+                last_open_time_str = series['data'][-1][0]
+                wait_time = float(series['data'][-1][1])
+                last_open_time = datetime.strptime(last_open_time_str, '%m/%d/%y %H:%M:%S')
+
+        if last_closed_time and last_open_time:
+            if last_closed_time > last_open_time:
+                return "CLOSED"
+            else:
+                return wait_time
+        elif last_closed_time:
+            return "CLOSED"
+        elif last_open_time:
+            return wait_time
+
+    except (json.JSONDecodeError, IndexError, ValueError):
         return 0.0
+    
     return 0.0
 
 def get_predicted_wait_time(attraction: str, target_hour: int) -> float:
@@ -148,7 +177,9 @@ def calculer_facteur_opportunite(actual_wait, avg_wait):
     avec des exposants différents pour la récompense et la pénalité.
     """
     # --- Constantes de la stratégie ---
+    # Exposant pour la récompense. > 1 rend la récompense plus forte.
     P_RECOMPENSE = 2
+    # Exposant pour la pénalité. > 1 rend la pénalité plus forte.
     P_PENALITE = 3 
     
     # --- Sécurité et cas par défaut ---
@@ -182,53 +213,60 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
     # --- ÉTAPE 1 : CALCUL DU TEMPS DE RÉFÉRENCE DYNAMIQUE ---
     predicted_waits_for_context = []
     for attraction in attractions_to_visit:
+        # On ne peut pas inclure les attractions fermées dans le calcul de la moyenne
         predicted_wait = get_predicted_wait_time(attraction=attraction, target_hour=current_time.hour)
-        if predicted_wait > 0:
+        if predicted_wait > 0: # Simple vérification pour éviter les valeurs nulles
             predicted_waits_for_context.append(predicted_wait)
 
     if predicted_waits_for_context:
         TEMPS_ATTENTE_REFERENCE = sum(predicted_waits_for_context) / len(predicted_waits_for_context)
     else:
-        TEMPS_ATTENTE_REFERENCE = 30 
+        TEMPS_ATTENTE_REFERENCE = 30  
 
-    # --- ÉTAPE 2 : CALCUL DU COÛT POUR CHAQUE CANDIDAT (LOGIQUE CORRIGÉE) ---
+    # --- ÉTAPE 2 : CALCUL DU COÛT POUR CHAQUE CANDIDAT ---
     all_candidates_details = []
-    best_choice_details = None
-    lowest_cost = float('inf')
-
+    
     for candidate in attractions_to_visit:
-        
-        # --- CORRECTION APPLIQUÉE ICI ---
-        # Si le candidat est notre position actuelle, le temps de trajet est de 0.
         if candidate == current_location:
             travel_time = 0.0
         else:
-            # Sinon, on cherche le temps de marche dans notre graphe.
-            travel_time = travel_times.get((current_location, candidate), 30) # 30 est une valeur de secours
-        # --- FIN DE LA CORRECTION ---
+            travel_time = travel_times.get((current_location, candidate), 30)
 
         real_current_wait = get_actual_wait_time(candidate)
-        predicted_wait_now = get_predicted_wait_time(
-            attraction=candidate, target_hour=current_time.hour
-        )
         
-        facteur_opportunite = calculer_facteur_opportunite(
-            actual_wait=real_current_wait,
-            avg_wait=predicted_wait_now
-        )
-        
-        opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
-        final_cost = travel_time + opportunity_cost
+        # NOUVEAU : Gérer le cas où l'attraction est fermée
+        if real_current_wait == "CLOSED":
+            final_cost = float('inf')  # Coût infini pour la déprioriser
+            predicted_wait_now = "N/A" # Non applicable
+        else:
+            # La logique existante ne s'applique que si l'attraction est ouverte
+            predicted_wait_now = get_predicted_wait_time(
+                attraction=candidate, target_hour=current_time.hour
+            )
+            
+            facteur_opportunite = calculer_facteur_opportunite(
+                actual_wait=real_current_wait,
+                avg_wait=predicted_wait_now
+            )
+            
+            opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
+            final_cost = travel_time + opportunity_cost
 
         candidate_details = {
-            "destination": candidate, "travel_time": travel_time,
-            "real_wait_time": real_current_wait, "predicted_wait_time": predicted_wait_now,
-            "cost": final_cost, "temps_reference_utilise": TEMPS_ATTENTE_REFERENCE
+            "destination": candidate, 
+            "travel_time": travel_time,
+            "real_wait_time": real_current_wait, # Affichera "CLOSED" ou le temps
+            "predicted_wait_time": predicted_wait_now,
+            "cost": final_cost, 
+            "temps_reference_utilise": TEMPS_ATTENTE_REFERENCE
         }
         all_candidates_details.append(candidate_details)
 
-        if final_cost < lowest_cost:
-            lowest_cost = final_cost
-            best_choice_details = candidate_details
-            
+    # NOUVEAU : Trier tous les candidats par coût pour que les attractions fermées soient à la fin
+    all_candidates_details.sort(key=lambda x: x['cost'])
+    
+    # Le meilleur choix est simplement le premier élément de la liste triée
+    # S'assurer que la liste n'est pas vide pour éviter une erreur
+    best_choice_details = all_candidates_details[0] if all_candidates_details else None
+        
     return best_choice_details, all_candidates_details
