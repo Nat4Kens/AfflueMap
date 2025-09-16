@@ -111,10 +111,6 @@ if location_data and location_data.get('latitude') is not None:
              st.session_state.attractions_to_visit = attractions_from_url
         else:
             st.session_state.attractions_to_visit = mainCode.ATTRACTIONS_MASTER_LIST.copy()
-
-        st.session_state.attractions_to_visit = [
-            attr for attr in st.session_state.attractions_to_visit if attr not in st.session_state.history
-        ]
         
         st.session_state.last_recommendation = None
         st.session_state.all_candidates = None
