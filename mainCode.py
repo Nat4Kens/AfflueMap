@@ -5,8 +5,6 @@ import json
 from collections import defaultdict
 from bs4 import BeautifulSoup
 from datetime import datetime
-from cachetools import cached, TTLCache
-
 
 # --- CONFIGURATION ET CONSTANTES ---
 
@@ -94,9 +92,6 @@ RE_CHART_SCRIPT = re.compile(r"var createChart = function")
 RE_JSON_DATA = re.compile(r"\[\{\"name\":.*?\}\]", re.DOTALL)
 RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
 
-ttl_cache = TTLCache(maxsize=128, ttl=200)
-
-@cached(cache=ttl_cache)
 def fetch_page_content(url: str) -> str:
     """Fetches the content of a URL and caches the result for 5 minutes."""
     try:
@@ -273,3 +268,4 @@ def find_best_next_step(current_location, attractions_to_visit, current_time):
     best_choice_details = all_candidates_details[0] if all_candidates_details else None
         
     return best_choice_details, all_candidates_details
+
