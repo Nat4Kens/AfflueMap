@@ -3,9 +3,10 @@ import re
 import requests
 import json
 from collections import defaultdict
-from functools import lru_cache
 from bs4 import BeautifulSoup
 from datetime import datetime
+from cachetools import cached, TTLCache
+
 
 # --- CONFIGURATION ET CONSTANTES ---
 
@@ -93,9 +94,11 @@ RE_CHART_SCRIPT = re.compile(r"var createChart = function")
 RE_JSON_DATA = re.compile(r"\[\{\"name\":.*?\}\]", re.DOTALL)
 RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
 
-@lru_cache(maxsize=None)
+ttl_cache = TTLCache(maxsize=128, ttl=200)
+
+@cached(cache=ttl_cache)
 def fetch_page_content(url: str) -> str:
-    """Fetches the content of a URL and caches the result."""
+    """Fetches the content of a URL and caches the result for 5 minutes."""
     try:
         resp = session.get(url, timeout=10)
         resp.raise_for_status()
