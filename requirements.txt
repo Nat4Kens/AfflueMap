@@ -4,10 +4,7 @@ beautifulsoup4
 folium
 streamlit-folium
 streamlit_geolocation
-numpy
-pandas
 pytz
-datetime
-cachetools
+
 
 
