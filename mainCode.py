@@ -4,15 +4,21 @@ import requests
 import json
 from collections import defaultdict
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ET CONSTANTES ---
+ATTRACTION_RIDE_TIME = 5 # Temps estimé passé dans l'attraction en minutes
 
 ATTRACTIONS_MASTER_LIST = [
     'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
     'Pirates in Batavia', 'Silver Star', 'Arthur', 'Matterhorn-Blitz', 'Eurosat',
     'Poseidon', 'Castello dei Medici', 'Pegasus', 'Swiss Bob Run',
     'Atlantica SuperSplash', 'Alpine Express', 'Atlantis Adventure'
+]
+
+VIRTUAL_LINE_ATTRACTIONS = [
+    'Blue Fire', 'Euro-Mir', 'Pirates in Batavia', 'Poseidon', 
+    'Voletarium', 'Voltron Nevera', 'Wodan'
 ]
 
 URLS = {
@@ -81,7 +87,8 @@ ATTRACTIONS_COORDS = {
     'Alpine Express' : (48.2621812175191, 7.722749967431886), 'Atlantis Adventure': (48.26622780789098, 7.7202422772430905)
 }
 
-# --- FONCTIONS DE CALCUL ---
+
+# --- FONCTIONS DE SCRAPING ET CALCUL ---
 
 session = requests.Session()
 session.headers.update({
@@ -93,7 +100,6 @@ RE_JSON_DATA = re.compile(r"\[\{\"name\":.*?\}\]", re.DOTALL)
 RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
 
 def fetch_page_content(url: str) -> str:
-    """Fetches the content of a URL and caches the result for 5 minutes."""
     try:
         resp = session.get(url, timeout=10)
         resp.raise_for_status()
@@ -103,169 +109,131 @@ def fetch_page_content(url: str) -> str:
         return ""
 
 def get_actual_wait_time(attraction: str):
-    """Gets the last reported wait time for an attraction."""
     url = URLS.get(attraction)
-    if not url:
-        return 0.0
+    if not url: return 0.0
     html = fetch_page_content(url)
-    if not html:
-        return 0.0
+    if not html: return 0.0
     soup = BeautifulSoup(html, 'html.parser')
     script = soup.find('script', string=RE_CHART_SCRIPT)
-    if not script:
-        return 0.0
+    if not script or not script.string: return 0.0
     match = RE_JSON_DATA.search(script.string)
-    if not match:
-        return 0.0
+    if not match: return 0.0
     try:
         data = json.loads(match.group())
-        
-        last_closed_time = None
-        last_open_time = None
-        wait_time = 0.0
-
+        last_closed_time, last_open_time, wait_time = None, None, 0.0
         for series in data:
             if series['name'] == 'Signalé fermé par le parc' and series['data']:
-                last_closed_time_str = series['data'][-1][0]
-                last_closed_time = datetime.strptime(last_closed_time_str, '%m/%d/%y %H:%M:%S')
-
+                last_closed_time = datetime.strptime(series['data'][-1][0], '%m/%d/%y %H:%M:%S')
             if series['name'] == 'Signalé par le parc' and series['data']:
-                last_open_time_str = series['data'][-1][0]
                 wait_time = float(series['data'][-1][1])
-                last_open_time = datetime.strptime(last_open_time_str, '%m/%d/%y %H:%M:%S')
-
-        if last_closed_time and last_open_time:
-            if last_closed_time > last_open_time:
-                return "CLOSED"
-            else:
-                return wait_time
-        elif last_closed_time:
+                last_open_time = datetime.strptime(series['data'][-1][0], '%m/%d/%y %H:%M:%S')
+        if last_closed_time and (not last_open_time or last_closed_time > last_open_time):
             return "CLOSED"
-        elif last_open_time:
-            return wait_time
-
+        return wait_time if last_open_time else "CLOSED"
     except (json.JSONDecodeError, IndexError, ValueError):
         return 0.0
-    
-    return 0.0
 
 def get_predicted_wait_time(attraction: str, target_hour: int) -> float:
-    """Predicts wait time for a given hour based on historical data."""
     if not (9 <= target_hour <= 20): return 0.0
     url = URLS.get(attraction)
     if not url: return 0.0
     html_content = fetch_page_content(url)
     if not html_content: return 0.0
     soup = BeautifulSoup(html_content, 'html.parser')
-    script_chart5_tag = soup.find('script', string=lambda t: t and 'chart-5' in t)
-    if script_chart5_tag and script_chart5_tag.string:
-        match_chart5 = RE_MONTH_CHART.search(script_chart5_tag.string)
-        if match_chart5:
-            try:
-                hourly_raw_data = json.loads(f'[{{"data":{match_chart5.group(1)}}}]')[0]["data"]
-                hourly_pattern_map = {int(e[0]): float(e[1]) for e in hourly_raw_data if e[1] is not None}
-                return hourly_pattern_map.get(target_hour, 0.0)
-            except (json.JSONDecodeError, IndexError):
-                return 0.0
-    return 0.0
+    script_tag = soup.find('script', string=lambda t: t and 'chart-5' in t)
+    if not script_tag or not script_tag.string: return 0.0
+    match = RE_MONTH_CHART.search(script_tag.string)
+    if not match: return 0.0
+    try:
+        hourly_data = json.loads(f'[{{"data":{match.group(1)}}}]')[0]["data"]
+        hourly_map = {int(e[0]): float(e[1]) for e in hourly_data if e[1] is not None}
+        return hourly_map.get(target_hour, 0.0)
+    except (json.JSONDecodeError, IndexError):
+        return 0.0
 
 def calculer_facteur_opportunite(actual_wait, avg_wait):
-    """
-    Calcule un facteur d'opportunité en utilisant une loi de puissance
-    avec des exposants différents pour la récompense et la pénalité.
-    """
-    # --- Constantes de la stratégie ---
-    # Exposant pour la récompense. > 1 rend la récompense plus forte.
-    P_RECOMPENSE = 2
-    # Exposant pour la pénalité. > 1 rend la pénalité plus forte.
-    P_PENALITE = 3 
-    
-    # --- Sécurité et cas par défaut ---
-    if avg_wait is None or actual_wait is None or avg_wait <= 5:
-        return 1.0
-
-    # Le ratio est la base de notre calcul
+    P_RECOMPENSE, P_PENALITE = 2, 3
+    if avg_wait is None or actual_wait is None or avg_wait <= 5: return 1.0
     ratio = actual_wait / avg_wait
-    
-    # --- Logique de puissance double ---
-    if ratio <= 1:
-        # Cas Récompense : on applique la puissance de récompense
-        facteur = ratio ** P_RECOMPENSE
-    else:
-        # Cas Pénalité : on applique la puissance de pénalité
-        facteur = ratio ** P_PENALITE
-    
-    # --- Plafonnement (clamping) ---
+    facteur = ratio ** P_RECOMPENSE if ratio <= 1 else ratio ** P_PENALITE
     return max(0.1, min(facteur, 5.0))
 
-def find_best_next_step(current_location, attractions_to_visit, current_time):
-    """
-    Analyse les attractions en utilisant un TEMPS DE RÉFÉRENCE DYNAMIQUE,
-    et en considérant la position actuelle comme une destination possible avec un temps de trajet nul.
-    """
+def find_best_next_step(current_location, attractions_to_visit, current_time, virtual_line_details=None):
     travel_times = defaultdict(lambda: float('inf'))
     for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
         travel_times[(loc1, loc2)] = weight
         travel_times[(loc2, loc1)] = weight
 
-    # --- ÉTAPE 1 : CALCUL DU TEMPS DE RÉFÉRENCE DYNAMIQUE ---
-    predicted_waits_for_context = []
-    for attraction in attractions_to_visit:
-        # On ne peut pas inclure les attractions fermées dans le calcul de la moyenne
-        predicted_wait = get_predicted_wait_time(attraction=attraction, target_hour=current_time.hour)
-        if predicted_wait > 0: # Simple vérification pour éviter les valeurs nulles
-            predicted_waits_for_context.append(predicted_wait)
+    predicted_waits = [p for p in (get_predicted_wait_time(attr, current_time.hour) for attr in attractions_to_visit) if p > 0]
+    TEMPS_ATTENTE_REFERENCE = sum(predicted_waits) / len(predicted_waits) if predicted_waits else 30
 
-    if predicted_waits_for_context:
-        TEMPS_ATTENTE_REFERENCE = sum(predicted_waits_for_context) / len(predicted_waits_for_context)
-    else:
-        TEMPS_ATTENTE_REFERENCE = 30  
-
-    # --- ÉTAPE 2 : CALCUL DU COÛT POUR CHAQUE CANDIDAT ---
     all_candidates_details = []
     
-    for candidate in attractions_to_visit:
-        if candidate == current_location:
-            travel_time = 0.0
-        else:
-            travel_time = travel_times.get((current_location, candidate), 30)
+    vl_datetime_target = None
+    if virtual_line_details:
+        vl_time = virtual_line_details['time']
+        vl_datetime_target = current_time.replace(hour=vl_time.hour, minute=vl_time.minute, second=0, microsecond=0)
+        if vl_datetime_target < current_time:
+            vl_datetime_target += timedelta(days=1)
 
+    for candidate in attractions_to_visit:
+        travel_time = travel_times.get((current_location, candidate), 30) if candidate != current_location else 0.0
         real_current_wait = get_actual_wait_time(candidate)
         
-        # NOUVEAU : Gérer le cas où l'attraction est fermée
+        end_time, arrival_at_vl, is_late = None, None, False
+        
         if real_current_wait == "CLOSED":
-            final_cost = float('inf')  # Coût infini pour la déprioriser
-            predicted_wait_now = "N/A" # Non applicable
+            final_cost = float('inf')
+            predicted_wait_now = "N/A"
         else:
-            # La logique existante ne s'applique que si l'attraction est ouverte
-            predicted_wait_now = get_predicted_wait_time(
-                attraction=candidate, target_hour=current_time.hour
-            )
+            predicted_wait_now = get_predicted_wait_time(candidate, current_time.hour)
+            total_time_at_candidate = timedelta(minutes=travel_time + real_current_wait + ATTRACTION_RIDE_TIME)
+            end_time = current_time + total_time_at_candidate
             
-            facteur_opportunite = calculer_facteur_opportunite(
-                actual_wait=real_current_wait,
-                avg_wait=predicted_wait_now
-            )
-            
-            opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
-            final_cost = travel_time + opportunity_cost
+            if virtual_line_details:
+                travel_time_to_vl = travel_times.get((candidate, virtual_line_details['attraction']), 30)
+                arrival_at_vl = end_time + timedelta(minutes=travel_time_to_vl)
+                
+                is_late = arrival_at_vl > (vl_datetime_target + timedelta(minutes=15))
+                
+                # Le coût est basé sur le temps total, mais infini si en retard
+                final_cost = float('inf') if is_late else total_time_at_candidate.total_seconds() / 60
+            else:
+                facteur_opportunite = calculer_facteur_opportunite(real_current_wait, predicted_wait_now)
+                opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
+                final_cost = travel_time + opportunity_cost
 
         candidate_details = {
             "destination": candidate, 
             "travel_time": travel_time,
-            "real_wait_time": real_current_wait, # Affichera "CLOSED" ou le temps
+            "real_wait_time": real_current_wait,
             "predicted_wait_time": predicted_wait_now,
             "cost": final_cost, 
-            "temps_reference_utilise": TEMPS_ATTENTE_REFERENCE
+            "end_time": end_time,
+            "arrival_at_vl": arrival_at_vl,
+            "is_late": is_late,
         }
         all_candidates_details.append(candidate_details)
 
-    # NOUVEAU : Trier tous les candidats par coût pour que les attractions fermées soient à la fin
-    all_candidates_details.sort(key=lambda x: x['cost'])
-    
-    # Le meilleur choix est simplement le premier élément de la liste triée
-    # S'assurer que la liste n'est pas vide pour éviter une erreur
-    best_choice_details = all_candidates_details[0] if all_candidates_details else None
+    if not all_candidates_details:
+        return {"cost": float('inf'), "destination": "N/A"}, []
+
+    if virtual_line_details:
+        # Séparer les candidats en retard et à l'heure
+        on_time_candidates = [c for c in all_candidates_details if not c['is_late']]
+        late_candidates = [c for c in all_candidates_details if c['is_late']]
+        
+        # Trier les candidats à l'heure par coût (le meilleur plan)
+        on_time_candidates.sort(key=lambda x: x['cost'])
+        
+        # Trier les candidats en retard par heure d'arrivée (du moins en retard au plus en retard)
+        late_candidates.sort(key=lambda x: x['arrival_at_vl'] or datetime.max.replace(tzinfo=current_time.tzinfo))
+        
+        # Combiner les listes
+        all_candidates_details = on_time_candidates + late_candidates
+    else:
+        all_candidates_details.sort(key=lambda x: x['cost'])
+        
+    best_choice_details = all_candidates_details[0] if all_candidates_details else {"cost": float('inf'), "destination": "N/A"}
         
     return best_choice_details, all_candidates_details
-
