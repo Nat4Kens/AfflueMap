@@ -1,6 +1,5 @@
 # translations.py
 
-# Dictionnaire contenant toutes les traductions
 LANGUAGES = {
     "fr": {
         "app_title": "Optimiseur AfflueMap",
@@ -25,17 +24,31 @@ LANGUAGES = {
         "candidate_header": "Candidat : {destination}",
         "travel_details": "Trajet",
         "wait_details": "Attente (Réel/Prédit)",
+        "end_time_details": "Heure de fin",
+        "end_time_vl_details": "Arrivée VL (Fin + Marche)",
         "cost_details": "Coût",
         "park_map_header": "Carte du Parc",
         "plan_expander_title": "Votre Plan ({count} attractions restantes)",
         "all_attractions_done": "Vous avez fait toutes les attractions de votre liste !",
         "path_done": "**Parcours effectué :**",
         "geolocation_waiting": "En attente de l'autorisation de géolocalisation...",
-        "geolocation_info": "Veuillez autoriser l'accès à votre position dans votre navigateur (vous devrez peut-être cliquer sur l'icône de boussole) pour démarrer l'application.  \nPlease allow access to your location in your browser (you may need to click the compass icon) to start the app.",
+        "geolocation_info": "Veuillez autoriser l'accès à votre position dans votre navigateur pour démarrer l'application.",
         "minutes_abbr": "min",
         "not_applicable_abbr": "N/A",
+        "closed": "Fermé",
         "initial_pos_toast": "Position initiale définie sur : **{pos}** (la plus proche).",
         "pos_updated_toast": "Position actualisée : {pos}",
+        # --- Virtual Line ---
+        "manage_vl_button": "Gérer la Virtual Line",
+        "vl_form_header": "Configurer une Virtual Line",
+        "vl_attraction_select": "Choisissez l'attraction",
+        "vl_time_input": "Heure du rendez-vous",
+        "vl_confirm_button": "Confirmer",
+        "vl_delete_button": "Supprimer la Virtual Line",
+        "vl_set_toast": "Virtual Line activée pour {attraction} à {time} !",
+        "vl_active_info": "Virtual Line active pour **{attraction}** à **{time}**.",
+        "vl_cancelled_toast": "Virtual Line annulée.",
+        "no_attraction_possible": "Aucune attraction ne peut être faite",
     },
     "en": {
         "app_title": "AfflueMap Optimizer",
@@ -60,20 +73,32 @@ LANGUAGES = {
         "candidate_header": "Candidate: {destination}",
         "travel_details": "Travel",
         "wait_details": "Wait (Real/Predicted)",
+        "end_time_details": "End Time",
+        "end_time_vl_details": "VL Arrival (End + Walk)",
         "cost_details": "Cost",
         "park_map_header": "Park Map",
         "plan_expander_title": "Your Plan ({count} attractions remaining)",
         "all_attractions_done": "You have completed all the attractions on your list!",
         "path_done": "**Path taken:**",
         "geolocation_waiting": "Waiting for geolocation permission...",
-        "geolocation_info": "Please allow access to your location in your browser (you may need to click the compass icon) to start the app.",
+        "geolocation_info": "Please allow access to your location in your browser to start the app.",
         "closed": "Closed",
         "minutes_abbr": "min",
         "not_applicable_abbr": "N/A",
         "initial_pos_toast": "Initial position set to: **{pos}** (closest).",
         "pos_updated_toast": "Position updated: {pos}",
+        # --- Virtual Line ---
+        "manage_vl_button": "Manage Virtual Line",
+        "vl_form_header": "Set up a Virtual Line",
+        "vl_attraction_select": "Choose the attraction",
+        "vl_time_input": "Appointment time",
+        "vl_confirm_button": "Confirm",
+        "vl_delete_button": "Delete Virtual Line",
+        "vl_set_toast": "Virtual Line set for {attraction} at {time}!",
+        "vl_active_info": "Virtual Line active for **{attraction}** at **{time}**.",
+        "vl_cancelled_toast": "Virtual Line cancelled.",
+        "no_attraction_possible": "No attraction can be done",
     },
-
     "de": {
         "app_title": "AfflueMap Wartezeit-Optimierer",
         "support_header": "Projekt unterstützen",
@@ -97,22 +122,34 @@ LANGUAGES = {
         "candidate_header": "Kandidat: {destination}",
         "travel_details": "Wegzeit",
         "wait_details": "Wartezeit (Echt/Vorhergesagt)",
+        "end_time_details": "Endzeit",
+        "end_time_vl_details": "VL Ankunft (Ende + Weg)",
         "cost_details": "Kosten",
         "park_map_header": "Parkplan",
         "plan_expander_title": "Dein Plan ({count} verbleibende Attraktionen)",
         "all_attractions_done": "Du hast alle Attraktionen auf deiner Liste abgeschlossen!",
         "path_done": "**Zurückgelegter Weg:**",
         "geolocation_waiting": "Warte auf Geolokalisierungs-Genehmigung...",
-        "geolocation_info": "Bitte erlaube den Zugriff auf deinen Standort in deinem Browser (möglicherweise musst du auf das Kompass-Symbol klicken), um die App zu starten.",
+        "geolocation_info": "Bitte erlaube den Zugriff auf deinen Standort in deinem Browser, um die App zu starten.",
         "closed": "Geschlossen",
         "minutes_abbr": "Min.",
         "not_applicable_abbr": "N. z.",
         "initial_pos_toast": "Startposition auf **{pos}** (nächstgelegene) festgelegt.",
         "pos_updated_toast": "Position aktualisiert: {pos}",
+        # --- Virtual Line ---
+        "manage_vl_button": "Virtual Line verwalten",
+        "vl_form_header": "Virtual Line einrichten",
+        "vl_attraction_select": "Attraktion wählen",
+        "vl_time_input": "Terminzeit",
+        "vl_confirm_button": "Bestätigen",
+        "vl_delete_button": "Virtual Line löschen",
+        "vl_set_toast": "Virtual Line für {attraction} um {time} aktiviert!",
+        "vl_active_info": "Virtual Line aktiv für **{attraction}** um **{time}**.",
+        "vl_cancelled_toast": "Virtual Line abgebrochen.",
+        "no_attraction_possible": "Es kann keine Attraktion besucht werden.",
     }
 }
 
-# La fonction reste inchangée
 def get_translator(lang='fr'):
     def translate(key, **kwargs):
         return LANGUAGES.get(lang, LANGUAGES['en']).get(key, key).format(**kwargs)
