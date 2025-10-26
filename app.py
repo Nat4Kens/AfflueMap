@@ -101,7 +101,7 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit, 
 
     for name, location in coords.items():
         if name in points_to_show:
-            style = "font-weight: bold; font-size: 11px; text-align: center;"
+            style = "font-weight: bold; font-size: 11px; text-align: center; color: black;"
             bg_color = "background-color: rgba(255, 255, 255, 0.7);"
             html_content = f"<b>{name}</b>"
             
@@ -404,3 +404,4 @@ with col_actions:
 
                 if is_late:
                     st.markdown("</div>", unsafe_allow_html=True)
+
