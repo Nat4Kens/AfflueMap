@@ -17,7 +17,8 @@ LANGUAGES = {
         "dashboard_vl_active": "Virtual Line",
         "path_header": "Votre Parcours",
         "path_start_info": "Votre parcours apparaîtra ici une fois que vous aurez visité votre première attraction.",
-        "map_header": "Carte du Parc en Direct",
+        "map_header_base": "Carte du Parc",
+        "map_header_with_time": "Carte du Parc à {time}",
         "actions_header": "Actions & Recommandation",
         "choose_this_attraction": "✅ Choisir cette attraction",
         # --- Statut du calcul ---
@@ -64,6 +65,10 @@ LANGUAGES = {
         "vl_set_toast": "Virtual Line activée pour {attraction} à {time} !",
         "vl_cancelled_toast": "Virtual Line annulée.",
         "no_attraction_possible": "Aucune attraction ne peut être faite pour le moment.",
+        # --- Soutien ---
+        "support_header": "Soutenir le projet",
+        "support_text": "Si cet outil vous est utile, vous pouvez offrir un café au développeur pour l'encourager !",
+        "support_button": "☕ Offrir un café",
     },
     "en": {
         "app_title": "AfflueMap Path Optimizer",
@@ -81,7 +86,8 @@ LANGUAGES = {
         "dashboard_vl_active": "Virtual Line",
         "path_header": "Your Path",
         "path_start_info": "Your path will appear here once you visit your first attraction.",
-        "map_header": "Live Park Map",
+        "map_header_base": "Park Map",
+        "map_header_with_time": "Park Map at {time}",
         "actions_header": "Actions & Recommendation",
         "choose_this_attraction": "✅ Choose this attraction",
         # --- Status ---
@@ -128,6 +134,10 @@ LANGUAGES = {
         "vl_set_toast": "Virtual Line set for {attraction} at {time}!",
         "vl_cancelled_toast": "Virtual Line cancelled.",
         "no_attraction_possible": "No attraction can be done right now.",
+        # --- Support ---
+        "support_header": "Support the Project",
+        "support_text": "If you find this tool helpful, you can buy the developer a coffee to encourage them!",
+        "support_button": "☕ Buy me a coffee",
     },
     "de": {
         "app_title": "AfflueMap Routenoptimierer",
@@ -145,7 +155,8 @@ LANGUAGES = {
         "dashboard_vl_active": "Virtual Line",
         "path_header": "Ihre Route",
         "path_start_info": "Ihre Route wird hier angezeigt, sobald Sie Ihre erste Attraktion besucht haben.",
-        "map_header": "Live-Parkplan",
+        "map_header_base": "Parkplan",
+        "map_header_with_time": "Parkplan um {time}",
         "actions_header": "Aktionen & Empfehlung",
         "choose_this_attraction": "✅ Diese Attraktion wählen",
         # --- Status ---
@@ -192,6 +203,10 @@ LANGUAGES = {
         "vl_set_toast": "Virtual Line für {attraction} um {time} aktiviert!",
         "vl_cancelled_toast": "Virtual Line abgebrochen.",
         "no_attraction_possible": "Im Moment kann keine Attraktion besucht werden.",
+        # --- Unterstützung ---
+        "support_header": "Unterstütze das Projekt",
+        "support_text": "Wenn du dieses Tool hilfreich findest, kannst du dem Entwickler einen Kaffee kaufen, um ihn zu ermutigen!",
+        "support_button": "☕ Kauf mir einen Kaffee",
     }
 }
 
@@ -199,4 +214,3 @@ def get_translator(lang='fr'):
     def translate(key, **kwargs):
         return LANGUAGES.get(lang, LANGUAGES['en']).get(key, key).format(**kwargs)
     return translate
-
