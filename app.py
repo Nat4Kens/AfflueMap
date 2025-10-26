@@ -3,6 +3,7 @@ import streamlit as st
 from datetime import datetime, time, timedelta
 import pytz
 import folium
+from folium.features import DivIcon # Important : Importer DivIcon
 from streamlit_folium import st_folium
 import mainCode # Importe notre moteur de calcul
 import translations # Importe le module de traduction
@@ -63,11 +64,12 @@ def init_session_state(lat=None, lon=None):
         st.session_state.all_candidates = None
         st.session_state.virtual_line_active = False
         st.session_state.virtual_line_details = {}
+        st.session_state.last_map_update_time = None 
         st.session_state.initialized = True
         update_url_state()
 
 # --- FONCTIONS D'AFFICHAGE ---
-def create_park_map(history, current_loc, recommendation, attractions_to_visit, vl_details):
+def create_park_map(history, current_loc, recommendation, attractions_to_visit, vl_details, wait_times_data=None):
     coords = mainCode.ATTRACTIONS_COORDS
     points_to_show = set(attractions_to_visit)
     points_to_show.add(current_loc)
@@ -99,21 +101,41 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit, 
 
     for name, location in coords.items():
         if name in points_to_show:
-            icon_color, icon_type, popup_text = 'gray', 'info-sign', name
-            if vl_details and name == vl_details['attraction']:
-                icon_color, icon_type = 'red', 'time'
-                popup_time = vl_details.get('time_str')
-                if not popup_time and isinstance(vl_details.get('time'), datetime):
-                    popup_time = vl_details['time'].strftime('%H:%M')
-                popup_text = f"{name} (Virtual Line: {popup_time})"
-            elif name == current_loc:
-                icon_color, icon_type = 'blue', 'user'
-            elif recommendation and name == recommendation['destination']:
-                icon_color, icon_type = 'green', 'flag'
-            elif name in history:
-                icon_color, icon_type = 'purple', 'ok-sign'
+            style = "font-weight: bold; font-size: 11px; text-align: center;"
+            bg_color = "background-color: rgba(255, 255, 255, 0.7);"
+            html_content = f"<b>{name}</b>"
             
-            folium.Marker(location=location, popup=popup_text, tooltip=popup_text, icon=folium.Icon(color=icon_color, icon=icon_type, prefix='glyphicon')).add_to(m)
+            if vl_details and name == vl_details['attraction']:
+                popup_time = vl_details.get('time_str', vl_details.get('time', '').strftime('%H:%M'))
+                html_content = f"<b>{name}</b><br>🎟️ VL: {popup_time}"
+                bg_color = "background-color: rgba(255, 204, 203, 0.8);"
+            elif name == current_loc:
+                html_content = f"📍<b>{name}</b>"
+                bg_color = "background-color: rgba(173, 216, 230, 0.8);"
+            elif recommendation and name == recommendation['destination']:
+                bg_color = "background-color: rgba(144, 238, 144, 0.8);"
+            elif name in history:
+                bg_color = "background-color: rgba(221, 160, 221, 0.8);"
+            
+            if wait_times_data and name in wait_times_data:
+                wait_time = wait_times_data[name]
+                if wait_time == "CLOSED":
+                    wait_display = f"🔴 {t('closed')}"
+                else:
+                    wait_display = f"~{wait_time:.0f} {t('minutes_abbr')}"
+                html_content += f"<br>{wait_display}"
+            
+            icon = DivIcon(
+                icon_size=(130, 30),
+                icon_anchor=(75, 18),
+                html=f'<div style="{style} {bg_color} padding: 5px; border-radius: 5px; border: 1px solid black;">{html_content}</div>',
+            )
+            
+            folium.Marker(
+                location=location,
+                icon=icon
+            ).add_to(m)
+            
     return m
 
 def update_url_state():
@@ -153,6 +175,10 @@ if 'welcome_dismissed' not in st.session_state:
 # --- BARRE LATÉRALE (SIDEBAR) ---
 with st.sidebar:
     st.markdown("---")
+    st.header(t("support_header"))
+    st.write(t("support_text"))
+    st.link_button(t("support_button"), "https://www.buymeacoffee.com/nat4K", use_container_width=True)
+    st.markdown("---")
     st.header(t("config_header"))
     
     selected_attractions = st.multiselect(
@@ -178,7 +204,6 @@ with st.sidebar:
         
     st.markdown("---")
     
-    # Section "Parcours Effectué" dans la sidebar
     with st.container(border=True):
         st.header(t("path_header"))
         if len(st.session_state.history) > 1:
@@ -195,23 +220,34 @@ with st.sidebar:
         st.rerun()
 
 # --- STRUCTURE PRINCIPALE AVEC COLONNES ---
-col_map, col_actions = st.columns([3, 2])
+col_actions, col_map = st.columns([3, 2])
+
+wait_times_info = {}
+if st.session_state.all_candidates:
+    wait_times_info = {c['destination']: c['real_wait_time'] for c in st.session_state.all_candidates}
 
 with col_map:
-    st.header(t("map_header"))
+    # Titre de la carte dynamique et propre
+    if st.session_state.get("last_map_update_time"):
+        update_time_str = st.session_state.last_map_update_time.strftime('%H:%M')
+        map_title = t("map_header_with_time", time=update_time_str)
+    else:
+        map_title = t("map_header_base")
+    st.header(map_title)
+
     park_map = create_park_map(
         history=st.session_state.history, 
         current_loc=st.session_state.current_location, 
         recommendation=st.session_state.last_recommendation, 
         attractions_to_visit=st.session_state.attractions_to_visit,
-        vl_details=st.session_state.virtual_line_details if st.session_state.virtual_line_active else None
+        vl_details=st.session_state.virtual_line_details if st.session_state.virtual_line_active else None,
+        wait_times_data=wait_times_info
     )
     st_folium(park_map, width='100%', height=500, returned_objects=[])
 
 with col_actions:
     st.header(t("actions_header"))
 
-    # --- TABLEAU DE BORD ---
     with st.container(border=True):
         st.subheader(t("dashboard_header"))
         db_cols = st.columns(3)
@@ -220,14 +256,14 @@ with col_actions:
         vl_text = st.session_state.virtual_line_details.get('time_str', "Inactive") if st.session_state.virtual_line_active else "Inactive"
         db_cols[2].metric(t("dashboard_vl_active"), vl_text)
 
-    # --- BOUTONS D'ACTION (RECOMMANDATION & VL) ---
-    if st.button(f"✨ {t('find_best_button')}", type="primary", use_container_width=True):
+    if st.button(f"{t('find_best_button')}", type="primary", use_container_width=True):
         if not st.session_state.attractions_to_visit:
             st.warning(t("empty_list_warning"))
         else:
             with st.status(t('status_calculating'), expanded=True) as status:
                 fuseau_horaire_parc = pytz.timezone('Europe/Berlin')
                 now = datetime.now(fuseau_horaire_parc)
+                st.session_state.last_map_update_time = now 
                 vl_details = st.session_state.virtual_line_details if st.session_state.virtual_line_active else None
                 
                 status.update(label=t('status_fetching_wait_times'), state="running")
@@ -242,9 +278,9 @@ with col_actions:
                     st.session_state.last_recommendation = None
                 
                 status.update(label=t('status_done'), state="complete", expanded=False)
+                st.rerun()
 
-    # --- POPOVER POUR LA VIRTUAL LINE ---
-    with st.popover(f"🎟️ {t('manage_vl_button')}", use_container_width=True):
+    with st.popover(f"{t('manage_vl_button')}", use_container_width=True):
         with st.form("virtual_line_form"):
             st.subheader(t("vl_popover_header"))
             vl_attraction_options = mainCode.VIRTUAL_LINE_ATTRACTIONS
@@ -289,7 +325,6 @@ with col_actions:
                     st.toast(t("vl_cancelled_toast"), icon="❌")
                     st.rerun()
 
-    # --- AFFICHAGE DE LA RECOMMANDATION ---
     if st.session_state.last_recommendation:
         rec = st.session_state.last_recommendation
         with st.container(border=True):
@@ -317,9 +352,8 @@ with col_actions:
     elif st.session_state.all_candidates and st.session_state.all_candidates[0]['cost'] == float('inf'):
          st.error(t("no_attraction_possible"))
 
-    # --- AFFICHAGE DES DÉTAILS DES CANDIDATS ---
     if st.session_state.all_candidates:
-        with st.expander(f"📊 {t('show_details_expander')}", expanded=False):
+        with st.expander(f"{t('show_details_expander')}", expanded=False):
             for candidate in st.session_state.all_candidates:
                 is_late = candidate.get('is_late', False)
                 if is_late:
@@ -370,4 +404,3 @@ with col_actions:
 
                 if is_late:
                     st.markdown("</div>", unsafe_allow_html=True)
-
