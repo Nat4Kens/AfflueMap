@@ -1,239 +1,407 @@
-# mainCode.py (Moteur de calcul)
-import re
-import requests
-import json
-from collections import defaultdict
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+# app.py (Interface Streamlit utilisant le moteur de calcul)
+import streamlit as st
+from datetime import datetime, time, timedelta
+import pytz
+import folium
+from folium.features import DivIcon # Important : Importer DivIcon
+from streamlit_folium import st_folium
+import mainCode # Importe notre moteur de calcul
+import translations # Importe le module de traduction
+from streamlit_geolocation import streamlit_geolocation
+import math
 
-# --- CONFIGURATION ET CONSTANTES ---
-ATTRACTION_RIDE_TIME = 5 # Temps estimé passé dans l'attraction en minutes
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(layout="wide", page_title="Optimiseur AfflueMap", initial_sidebar_state="expanded")
+START_LOCATION_DEFAULT = 'Entree'
 
-ATTRACTIONS_MASTER_LIST = [
-    'Wodan', 'Blue Fire', 'Voletarium', 'Voltron Nevera', 'Euro-Mir',
-    'Pirates in Batavia', 'Silver Star', 'Arthur', 'Matterhorn-Blitz', 'Eurosat',
-    'Poseidon', 'Castello dei Medici', 'Pegasus', 'Swiss Bob Run',
-    'Atlantica SuperSplash', 'Alpine Express', 'Atlantis Adventure'
-]
+# --- FONCTIONS UTILITAIRES ---
+def round_up_time(dt: datetime, minute_step: int = 10) -> datetime:
+    """Arrondit un datetime au prochain multiple de `minute_step`."""
+    minutes = dt.hour * 60 + dt.minute
+    next_minutes = math.ceil((minutes + 1e-9) / minute_step) * minute_step
+    if next_minutes == minutes:
+        next_minutes += minute_step
+    new_hour = (next_minutes // 60) % 24
+    new_minute = next_minutes % 60
+    return dt.replace(hour=new_hour, minute=new_minute, second=0, microsecond=0)
 
-VIRTUAL_LINE_ATTRACTIONS = [
-    'Blue Fire', 'Euro-Mir', 'Pirates in Batavia', 'Poseidon', 
-    'Voletarium', 'Voltron Nevera', 'Wodan'
-]
+# --- GESTION DE LA LANGUE ---
+def set_language(lang_code):
+    st.session_state.lang = lang_code
 
-URLS = {
-    'Blue Fire': 'https://queue-times.com/fr/parks/51/rides/5603', 'Voltron Nevera': 'https://queue-times.com/fr/parks/51/rides/13349',
-    'Wodan': 'https://queue-times.com/fr/parks/51/rides/5602', 'Euro-Mir': 'https://queue-times.com/fr/parks/51/rides/5605',
-    'Voletarium': 'https://queue-times.com/fr/parks/51/rides/5630', 'Pirates in Batavia': 'https://queue-times.com/fr/parks/51/rides/5617',
-    'Silver Star': 'https://queue-times.com/fr/parks/51/rides/5604', 'Arthur': 'https://queue-times.com/fr/parks/51/rides/5618',
-    'Matterhorn-Blitz': 'https://queue-times.com/fr/parks/51/rides/5607', 'Eurosat': 'https://queue-times.com/fr/parks/51/rides/5737',
-    'Poseidon': 'https://queue-times.com/fr/parks/51/rides/5611', 'Castello dei Medici': 'https://queue-times.com/fr/parks/51/rides/5616',
-    'Pegasus': 'https://queue-times.com/fr/parks/51/rides/5608', 'Swiss Bob Run': 'https://queue-times.com/fr/parks/51/rides/5613',
-    'Atlantis Adventure': 'https://queue-times.com/fr/parks/51/rides/5615', 'Atlantica SuperSplash': 'https://queue-times.com/fr/parks/51/rides/5610',
-    'Alpine Express': 'https://queue-times.com/fr/parks/51/rides/5606'
-}
+if 'lang' not in st.session_state:
+    st.session_state.lang = 'fr'
 
-COMPLETE_EDGES_UNPONDERED = [
-    ('Blue Fire', 'Voltron Nevera', 15), ('Blue Fire', 'Wodan', 3), ('Blue Fire', 'Euro-Mir', 11), ('Blue Fire', 'Voletarium', 28),
-    ('Voltron Nevera', 'Wodan', 9), ('Voltron Nevera', 'Euro-Mir', 1), ('Euro-Mir', 'Wodan', 8), ('Voletarium', 'Voltron Nevera', 8),
-    ('Voletarium', 'Wodan', 16), ('Voletarium', 'Euro-Mir', 9), ('Pirates in Batavia', 'Blue Fire', 7), ('Pirates in Batavia', 'Voltron Nevera', 9),
-    ('Pirates in Batavia', 'Wodan', 10), ('Pirates in Batavia', 'Euro-Mir', 4), ('Pirates in Batavia', 'Voletarium', 18), ('Pirates in Batavia', 'Silver Star', 12),
-    ('Pirates in Batavia', 'Arthur', 8), ('Pirates in Batavia', 'Matterhorn-Blitz', 9), ('Pirates in Batavia', 'Eurosat', 11), ('Pirates in Batavia', 'Poseidon', 13),
-    ('Silver Star', 'Blue Fire', 19), ('Silver Star', 'Voltron Nevera', 6), ('Silver Star', 'Wodan', 21), ('Silver Star', 'Euro-Mir', 7),
-    ('Silver Star', 'Voletarium', 9), ('Silver Star', 'Arthur', 13), ('Silver Star', 'Matterhorn-Blitz', 3), ('Silver Star', 'Eurosat', 2),
-    ('Silver Star', 'Poseidon', 2), ('Arthur', 'Blue Fire', 13), ('Arthur', 'Voltron Nevera', 10), ('Arthur', 'Wodan', 13),
-    ('Arthur', 'Euro-Mir', 8), ('Arthur', 'Voletarium', 19), ('Arthur', 'Matterhorn-Blitz', 10), ('Arthur', 'Eurosat', 12),
-    ('Arthur', 'Poseidon', 14), ('Matterhorn-Blitz', 'Blue Fire', 16), ('Matterhorn-Blitz', 'Voltron Nevera', 3), ('Matterhorn-Blitz', 'Wodan', 18),
-    ('Matterhorn-Blitz', 'Euro-Mir', 4), ('Matterhorn-Blitz', 'Voletarium', 11), ('Matterhorn-Blitz', 'Eurosat', 2), ('Matterhorn-Blitz', 'Poseidon', 5),
-    ('Eurosat', 'Blue Fire', 18), ('Eurosat', 'Voltron Nevera', 5), ('Eurosat', 'Wodan', 20), ('Eurosat', 'Euro-Mir', 6),
-    ('Eurosat', 'Voletarium', 9), ('Eurosat', 'Poseidon', 4), ('Poseidon', 'Blue Fire', 19), ('Poseidon', 'Voltron Nevera', 2),
-    ('Poseidon', 'Wodan', 19), ('Poseidon', 'Euro-Mir', 5), ('Poseidon', 'Voletarium', 14), ('Entree', 'Blue Fire', 27),
-    ('Entree', 'Voltron Nevera', 13), ('Entree', 'Wodan', 27), ('Entree', 'Euro-Mir', 14), ('Entree', 'Voletarium', 1),
-    ('Entree', 'Pirates in Batavia', 20), ('Entree', 'Silver Star', 7), ('Entree', 'Arthur', 18), ('Entree', 'Matterhorn-Blitz', 8),
-    ('Entree', 'Eurosat', 8), ('Entree', 'Poseidon', 11), ('Entree', 'Swiss Bob Run', 11), ('Entree', 'Atlantis Adventure', 12), ('Entree', 'Atlantica SuperSplash', 23),
-    ('Entree', 'Alpine Express', 20),
-    ('Castello dei Medici', 'Entree', 4), ('Castello dei Medici', 'Poseidon', 6), ('Castello dei Medici', 'Eurosat', 3), ('Castello dei Medici', 'Matterhorn-Blitz', 5),
-    ('Castello dei Medici', 'Arthur', 12), ('Castello dei Medici', 'Silver Star', 3), ('Castello dei Medici', 'Pirates in Batavia', 12), ('Castello dei Medici', 'Voletarium', 6),
-    ('Castello dei Medici', 'Euro-Mir', 8), ('Castello dei Medici', 'Wodan', 22), ('Castello dei Medici', 'Voltron Nevera', 8), ('Castello dei Medici', 'Blue Fire', 19),
-    ('Pegasus', 'Entree', 10), ('Pegasus', 'Poseidon', 1), ('Pegasus', 'Eurosat', 4), ('Pegasus', 'Matterhorn-Blitz', 5),
-    ('Pegasus', 'Arthur', 14), ('Pegasus', 'Silver Star', 2), ('Pegasus', 'Pirates in Batavia', 13), ('Pegasus', 'Voletarium', 11),
-    ('Pegasus', 'Euro-Mir', 9), ('Pegasus', 'Wodan', 22), ('Pegasus', 'Voltron Nevera', 7), ('Pegasus', 'Blue Fire', 20), ('Pegasus', 'Castello dei Medici', 5),
-    ('Swiss Bob Run', 'Poseidon', 6), ('Swiss Bob Run', 'Eurosat', 3), ('Swiss Bob Run', 'Matterhorn-Blitz', 1), ('Swiss Bob Run', 'Pegasus', 6),
-    ('Swiss Bob Run', 'Arthur', 9), ('Swiss Bob Run', 'Silver Star', 4), ('Swiss Bob Run', 'Pirates in Batavia', 8), ('Swiss Bob Run', 'Voletarium', 12),
-    ('Swiss Bob Run', 'Euro-Mir', 4), ('Swiss Bob Run', 'Wodan', 18), ('Swiss Bob Run', 'Voltron Nevera', 4), ('Swiss Bob Run', 'Blue Fire', 15), ('Swiss Bob Run', 'Castello dei Medici', 6),
-    ('Atlantis Adventure', 'Poseidon', 5), ('Atlantis Adventure', 'Eurosat', 3), ('Atlantis Adventure', 'Matterhorn-Blitz', 1), ('Atlantis Adventure', 'Pegasus', 6),
-    ('Atlantis Adventure', 'Arthur', 8), ('Atlantis Adventure', 'Silver Star', 5), ('Atlantis Adventure', 'Pirates in Batavia', 7), ('Atlantis Adventure', 'Voletarium', 13),
-    ('Atlantis Adventure', 'Euro-Mir', 3), ('Atlantis Adventure', 'Wodan', 17), ('Atlantis Adventure', 'Voltron Nevera', 1), ('Atlantis Adventure', 'Blue Fire', 14), ('Atlantis Adventure', 'Castello dei Medici', 6),
-    ('Atlantis Adventure', 'Swiss Bob Run', 3),
-    ('Atlantica SuperSplash', 'Poseidon', 19), ('Atlantica SuperSplash', 'Eurosat', 17), ('Atlantica SuperSplash', 'Matterhorn-Blitz', 15), ('Atlantica SuperSplash', 'Pegasus', 19),
-    ('Atlantica SuperSplash', 'Arthur', 9), ('Atlantica SuperSplash', 'Silver Star', 18), ('Atlantica SuperSplash', 'Pirates in Batavia', 7), ('Atlantica SuperSplash', 'Voletarium', 24),
-    ('Atlantica SuperSplash', 'Euro-Mir', 10), ('Atlantica SuperSplash', 'Wodan', 6), ('Atlantica SuperSplash', 'Voltron Nevera', 15), ('Atlantica SuperSplash', 'Blue Fire', 6), ('Atlantica SuperSplash', 'Castello dei Medici', 18),
-    ('Atlantica SuperSplash', 'Swiss Bob Run', 14), ('Atlantica SuperSplash', 'Atlantis Adventure', 13),
-    ('Alpine Express', 'Poseidon', 18), ('Alpine Express', 'Eurosat', 16), ('Alpine Express', 'Matterhorn-Blitz', 14), ('Alpine Express', 'Pegasus', 18),
-    ('Alpine Express', 'Arthur', 5), ('Alpine Express', 'Silver Star', 17), ('Alpine Express', 'Pirates in Batavia', 6), ('Alpine Express', 'Voletarium', 23),
-    ('Alpine Express', 'Euro-Mir', 9), ('Alpine Express', 'Wodan', 11), ('Alpine Express', 'Voltron Nevera', 14), ('Alpine Express', 'Blue Fire', 11), ('Alpine Express', 'Castello dei Medici', 17),
-    ('Alpine Express', 'Swiss Bob Run', 13), ('Alpine Express', 'Atlantica SuperSplash', 7), ('Alpine Express', 'Atlantis Adventure', 12)
-]
+with st.sidebar:
+    st.header("Language / Langue")
+    cols = st.columns(3)
+    cols[0].button("🇬🇧", on_click=set_language, args=('en',), use_container_width=True)
+    cols[1].button("🇫🇷", on_click=set_language, args=('fr',), use_container_width=True)
+    cols[2].button("🇩🇪", on_click=set_language, args=('de',), use_container_width=True)
 
-ATTRACTIONS_COORDS = {
-    'Entree': (48.26886239084585, 7.7218611694409045), 'Voletarium': (48.26917304513733, 7.722443208799992),
-    'Eurosat': (48.267451577912816, 7.72113123949057), 'Silver Star': (48.26779998024085, 7.720126590003773),
-    'Euro-Mir': (48.26507602609998, 7.720178628240745), 'Wodan': (48.26138819760847, 7.7192129584382885),
-    'Blue Fire': (48.26265872340149, 7.718827721822693), 'Voltron Nevera': (48.2657797944176, 7.719762395202016),
-    'Pirates in Batavia': (48.26358868421831, 7.7204499731581135), 'Arthur': (48.26389057631639, 7.723843203049346),
-    'Matterhorn-Blitz': (48.26691168136572, 7.72049900063425), 'Poseidon': (48.26666361205288, 7.719339791552477),
-    'Castello dei Medici': (48.26778972322049, 7.7219478107095005), 'Pegasus': (48.267802325534184, 7.719292403563365),
-    'Swiss Bob Run' : (48.26641724603062, 7.721222909834505), 'Atlantica SuperSplash' : (48.26206292443042, 7.721499320393662),
-    'Alpine Express' : (48.2621812175191, 7.722749967431886), 'Atlantis Adventure': (48.26622780789098, 7.7202422772430905)
-}
+t = translations.get_translator(st.session_state.lang)
 
-
-# --- FONCTIONS DE SCRAPING ET CALCUL ---
-
-session = requests.Session()
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-})
-
-RE_CHART_SCRIPT = re.compile(r"var createChart = function")
-RE_JSON_DATA = re.compile(r"\[\{\"name\":.*?\}\]", re.DOTALL)
-RE_MONTH_CHART = re.compile(r'\[\{"name":".*?","data":(.*?)}\]', re.DOTALL)
-
-def fetch_page_content(url: str) -> str:
-    try:
-        resp = session.get(url, timeout=10)
-        resp.raise_for_status()
-        return resp.text
-    except requests.exceptions.RequestException as e:
-        print(f"Erreur de réseau en contactant {url}: {e}")
-        return ""
-
-def get_actual_wait_time(attraction: str):
-    url = URLS.get(attraction)
-    if not url: return 0.0
-    html = fetch_page_content(url)
-    if not html: return 0.0
-    soup = BeautifulSoup(html, 'html.parser')
-    script = soup.find('script', string=RE_CHART_SCRIPT)
-    if not script or not script.string: return 0.0
-    match = RE_JSON_DATA.search(script.string)
-    if not match: return 0.0
-    try:
-        data = json.loads(match.group())
-        last_closed_time, last_open_time, wait_time = None, None, 0.0
-        for series in data:
-            if series['name'] == 'Signalé fermé par le parc' and series['data']:
-                last_closed_time = datetime.strptime(series['data'][-1][0], '%m/%d/%y %H:%M:%S')
-            if series['name'] == 'Signalé par le parc' and series['data']:
-                wait_time = float(series['data'][-1][1])
-                last_open_time = datetime.strptime(series['data'][-1][0], '%m/%d/%y %H:%M:%S')
-        if last_closed_time and (not last_open_time or last_closed_time > last_open_time):
-            return "CLOSED"
-        return wait_time if last_open_time else "CLOSED"
-    except (json.JSONDecodeError, IndexError, ValueError):
-        return 0.0
-
-def get_predicted_wait_time(attraction: str, target_hour: int) -> float:
-    if not (9 <= target_hour <= 20): return 0.0
-    url = URLS.get(attraction)
-    if not url: return 0.0
-    html_content = fetch_page_content(url)
-    if not html_content: return 0.0
-    soup = BeautifulSoup(html_content, 'html.parser')
-    script_tag = soup.find('script', string=lambda t: t and 'chart-5' in t)
-    if not script_tag or not script_tag.string: return 0.0
-    match = RE_MONTH_CHART.search(script_tag.string)
-    if not match: return 0.0
-    try:
-        hourly_data = json.loads(f'[{{"data":{match.group(1)}}}]')[0]["data"]
-        hourly_map = {int(e[0]): float(e[1]) for e in hourly_data if e[1] is not None}
-        return hourly_map.get(target_hour, 0.0)
-    except (json.JSONDecodeError, IndexError):
-        return 0.0
-
-def calculer_facteur_opportunite(actual_wait, avg_wait):
-    P_RECOMPENSE, P_PENALITE = 2, 3
-    if avg_wait is None or actual_wait is None or avg_wait <= 5: return 1.0
-    ratio = actual_wait / avg_wait
-    facteur = ratio ** P_RECOMPENSE if ratio <= 1 else ratio ** P_PENALITE
-    return max(0.1, min(facteur, 5.0))
-
-def find_best_next_step(current_location, attractions_to_visit, current_time, virtual_line_details=None):
-    travel_times = defaultdict(lambda: float('inf'))
-    for loc1, loc2, weight in COMPLETE_EDGES_UNPONDERED:
-        travel_times[(loc1, loc2)] = weight
-        travel_times[(loc2, loc1)] = weight
-
-    predicted_waits = [p for p in (get_predicted_wait_time(attr, current_time.hour) for attr in attractions_to_visit) if p > 0]
-    TEMPS_ATTENTE_REFERENCE = sum(predicted_waits) / len(predicted_waits) if predicted_waits else 30
-
-    all_candidates_details = []
-    
-    vl_datetime_target = None
-    if virtual_line_details:
-        vl_time = virtual_line_details['time']
-        vl_datetime_target = current_time.replace(hour=vl_time.hour, minute=vl_time.minute, second=0, microsecond=0)
-        if vl_datetime_target < current_time:
-            vl_datetime_target += timedelta(days=1)
-
-    for candidate in attractions_to_visit:
-        travel_time = travel_times.get((current_location, candidate), 30) if candidate != current_location else 0.0
-        real_current_wait = get_actual_wait_time(candidate)
-        
-        end_time, arrival_at_vl, is_late = None, None, False
-        
-        if real_current_wait == "CLOSED":
-            final_cost = float('inf')
-            predicted_wait_now = "N/A"
+# --- INITIALISATION DU SESSION STATE ---
+def init_session_state(lat=None, lon=None):
+    if 'initialized' not in st.session_state:
+        params = st.query_params.to_dict()
+        history_from_url = params.get('history', "").split(',') if params.get('history') else []
+        if history_from_url:
+            st.session_state.history = history_from_url
+            st.session_state.current_location = st.session_state.history[-1]
         else:
-            predicted_wait_now = get_predicted_wait_time(candidate, current_time.hour)
-            total_time_at_candidate = timedelta(minutes=travel_time + real_current_wait + ATTRACTION_RIDE_TIME)
-            end_time = current_time + total_time_at_candidate
-            
-            if virtual_line_details:
-                travel_time_to_vl = travel_times.get((candidate, virtual_line_details['attraction']), 30)
-                arrival_at_vl = end_time + timedelta(minutes=travel_time_to_vl)
-                
-                is_late = arrival_at_vl > (vl_datetime_target + timedelta(minutes=15))
-                
-                # Le coût est basé sur le temps total, mais infini si en retard
-                final_cost = float('inf') if is_late else total_time_at_candidate.total_seconds() / 60
-            else:
-                facteur_opportunite = calculer_facteur_opportunite(real_current_wait, predicted_wait_now)
-                opportunity_cost = TEMPS_ATTENTE_REFERENCE * facteur_opportunite
-                final_cost = travel_time + opportunity_cost
-
-        candidate_details = {
-            "destination": candidate, 
-            "travel_time": travel_time,
-            "real_wait_time": real_current_wait,
-            "predicted_wait_time": predicted_wait_now,
-            "cost": final_cost, 
-            "end_time": end_time,
-            "arrival_at_vl": arrival_at_vl,
-            "is_late": is_late,
-        }
-        all_candidates_details.append(candidate_details)
-
-    if not all_candidates_details:
-        return {"cost": float('inf'), "destination": "N/A"}, []
-
-    if virtual_line_details:
-        # Séparer les candidats en retard et à l'heure
-        on_time_candidates = [c for c in all_candidates_details if not c['is_late']]
-        late_candidates = [c for c in all_candidates_details if c['is_late']]
+            initial_pos = find_closest_attraction(lat, lon)
+            if lat and lon:
+                st.toast(t("initial_pos_toast", pos=initial_pos), icon="📍")
+            st.session_state.history = [initial_pos]
+            st.session_state.current_location = initial_pos
         
-        # Trier les candidats à l'heure par coût (le meilleur plan)
-        on_time_candidates.sort(key=lambda x: x['cost'])
-        
-        # Trier les candidats en retard par heure d'arrivée (du moins en retard au plus en retard)
-        late_candidates.sort(key=lambda x: x['arrival_at_vl'] or datetime.max.replace(tzinfo=current_time.tzinfo))
-        
-        # Combiner les listes
-        all_candidates_details = on_time_candidates + late_candidates
+        attractions_from_url_raw = params.get('attractions_to_visit', "")
+        attractions_from_url = attractions_from_url_raw.split(',') if attractions_from_url_raw else []
+        st.session_state.attractions_to_visit = attractions_from_url if attractions_from_url else mainCode.ATTRACTIONS_MASTER_LIST.copy()
+
+        st.session_state.last_recommendation = None
+        st.session_state.all_candidates = None
+        st.session_state.virtual_line_active = False
+        st.session_state.virtual_line_details = {}
+        st.session_state.last_map_update_time = None 
+        st.session_state.initialized = True
+        update_url_state()
+
+# --- FONCTIONS D'AFFICHAGE ---
+def create_park_map(history, current_loc, recommendation, attractions_to_visit, vl_details, wait_times_data=None):
+    coords = mainCode.ATTRACTIONS_COORDS
+    points_to_show = set(attractions_to_visit)
+    points_to_show.add(current_loc)
+    if recommendation and recommendation['destination'] != "N/A":
+        points_to_show.add(recommendation['destination'])
+    if vl_details:
+        points_to_show.add(vl_details['attraction'])
+
+    valid_points = [loc for loc in points_to_show if loc in coords]
+    if not valid_points:
+        center_coords = (48.266, 7.721)
     else:
-        all_candidates_details.sort(key=lambda x: x['cost'])
+        avg_lat = sum(coords[loc][0] for loc in valid_points) / len(valid_points)
+        avg_lon = sum(coords[loc][1] for loc in valid_points) / len(valid_points)
+        center_coords = (avg_lat, avg_lon)
+
+    m = folium.Map(location=center_coords, zoom_start=15, tiles="CartoDB positron")
+
+    if len(history) > 1:
+        path_coords = [coords[loc] for loc in history if loc in coords]
+        if path_coords:
+            folium.PolyLine(path_coords, color='blue', weight=4, opacity=0.8, tooltip=t("path_done")).add_to(m)
+
+    if recommendation and recommendation['destination'] != "N/A":
+        start_coord = coords.get(current_loc)
+        end_coord = coords.get(recommendation['destination'])
+        if start_coord and end_coord:
+            folium.PolyLine([start_coord, end_coord], color='green', weight=5, dash_array='10', tooltip=t("next_step_header")).add_to(m)
+
+    for name, location in coords.items():
+        if name in points_to_show:
+            style = "font-weight: bold; font-size: 11px; text-align: center; color: black;"
+            bg_color = "background-color: rgba(255, 255, 255, 0.7);"
+            html_content = f"<b>{name}</b>"
+            
+            if vl_details and name == vl_details['attraction']:
+                popup_time = vl_details.get('time_str', vl_details.get('time', '').strftime('%H:%M'))
+                html_content = f"<b>{name}</b><br>🎟️ VL: {popup_time}"
+                bg_color = "background-color: rgba(255, 204, 203, 0.8);"
+            elif name == current_loc:
+                html_content = f"📍<b>{name}</b>"
+                bg_color = "background-color: rgba(173, 216, 230, 0.8);"
+            elif recommendation and name == recommendation['destination']:
+                bg_color = "background-color: rgba(144, 238, 144, 0.8);"
+            elif name in history:
+                bg_color = "background-color: rgba(221, 160, 221, 0.8);"
+            
+            if wait_times_data and name in wait_times_data:
+                wait_time = wait_times_data[name]
+                if wait_time == "CLOSED":
+                    wait_display = f"🔴 {t('closed')}"
+                else:
+                    wait_display = f"~{wait_time:.0f} {t('minutes_abbr')}"
+                html_content += f"<br>{wait_display}"
+            
+            icon = DivIcon(
+                icon_size=(130, 30),
+                icon_anchor=(75, 18),
+                html=f'<div style="{style} {bg_color} padding: 5px; border-radius: 5px; border: 1px solid black;">{html_content}</div>',
+            )
+            
+            folium.Marker(
+                location=location,
+                icon=icon
+            ).add_to(m)
+            
+    return m
+
+def update_url_state():
+    st.query_params["history"] = ",".join(st.session_state.history)
+    st.query_params["attractions_to_visit"] = ",".join(st.session_state.attractions_to_visit)
+
+def find_closest_attraction(user_lat, user_lon):
+    if user_lat is None or user_lon is None: return START_LOCATION_DEFAULT
+    return min(mainCode.ATTRACTIONS_COORDS.items(), 
+               key=lambda item: (item[1][0] - user_lat)**2 + (item[1][1] - user_lon)**2)[0]
+
+# --- DÉBUT DE L'INTERFACE PRINCIPALE ---
+st.title(f"🎢 {t('app_title')}")
+
+
+# --- GÉOLOCALISATION ET INITIALISATION ---
+location_data = streamlit_geolocation()
+user_lat = location_data.get('latitude') if location_data else None
+user_lon = location_data.get('longitude') if location_data else None
+init_session_state(user_lat, user_lon)
+
+# --- MESSAGE D'ACCUEIL POUR LES NOUVEAUX UTILISATEURS ---
+if 'welcome_dismissed' not in st.session_state:
+    with st.container(border=True):
+        st.header(t('welcome_header'))
+        st.write(t('welcome_intro'))
+        st.markdown(f"""
+        - {t('welcome_step1')}
+        - {t('welcome_step2')}
+        - {t('welcome_step3')}
+        """)
+        if st.button(t('welcome_dismiss'), type="primary"):
+            st.session_state.welcome_dismissed = True
+            st.rerun()
+    st.markdown("---")
+
+
+# --- BARRE LATÉRALE (SIDEBAR) ---
+with st.sidebar:
+    st.markdown("---")
+    st.header(t("support_header"))
+    st.write(t("support_text"))
+    st.link_button(t("support_button"), "https://www.buymeacoffee.com/nat4K", use_container_width=True)
+    st.markdown("---")
+    st.header(t("config_header"))
+    
+    selected_attractions = st.multiselect(
+        t("attractions_select"), 
+        options=mainCode.ATTRACTIONS_MASTER_LIST, 
+        default=st.session_state.attractions_to_visit
+    )
+    if selected_attractions != st.session_state.attractions_to_visit:
+        st.session_state.attractions_to_visit = selected_attractions
+        update_url_state()
+        st.rerun()
         
-    best_choice_details = all_candidates_details[0] if all_candidates_details else {"cost": float('inf'), "destination": "N/A"}
+    st.markdown("---")
+    st.info(t("start_pos_info", location=st.session_state.current_location))
+    if st.button(f"🔄 {t('refresh_pos_button')}", help=t("refresh_pos_help")):
+        if user_lat and user_lon:
+            closest = find_closest_attraction(user_lat, user_lon)
+            st.session_state.current_location = closest
+            st.toast(t("pos_updated_toast", pos=closest), icon="🔄")
+            st.rerun()
+        else:
+            st.error(t("geolocation_not_available_error"))
         
-    return best_choice_details, all_candidates_details
+    st.markdown("---")
+    
+    with st.container(border=True):
+        st.header(t("path_header"))
+        if len(st.session_state.history) > 1:
+            st.write(" ➡️ ".join(st.session_state.history))
+        else:
+            st.info(t("path_start_info"))
+
+    st.markdown("---")
+    if st.button(f"🗑️ {t('reset_day_button')}", use_container_width=True):
+        keys_to_clear = list(st.session_state.keys())
+        for key in keys_to_clear:
+            del st.session_state[key]
+        st.query_params.clear()
+        st.rerun()
+
+# --- STRUCTURE PRINCIPALE AVEC COLONNES ---
+col_actions, col_map = st.columns([3, 2])
+
+wait_times_info = {}
+if st.session_state.all_candidates:
+    wait_times_info = {c['destination']: c['real_wait_time'] for c in st.session_state.all_candidates}
+
+with col_map:
+    # Titre de la carte dynamique et propre
+    if st.session_state.get("last_map_update_time"):
+        update_time_str = st.session_state.last_map_update_time.strftime('%H:%M')
+        map_title = t("map_header_with_time", time=update_time_str)
+    else:
+        map_title = t("map_header_base")
+    st.header(map_title)
+
+    park_map = create_park_map(
+        history=st.session_state.history, 
+        current_loc=st.session_state.current_location, 
+        recommendation=st.session_state.last_recommendation, 
+        attractions_to_visit=st.session_state.attractions_to_visit,
+        vl_details=st.session_state.virtual_line_details if st.session_state.virtual_line_active else None,
+        wait_times_data=wait_times_info
+    )
+    st_folium(park_map, width='100%', height=500, returned_objects=[])
+
+with col_actions:
+    st.header(t("actions_header"))
+
+    with st.container(border=True):
+        st.subheader(t("dashboard_header"))
+        db_cols = st.columns(3)
+        db_cols[0].metric(t("dashboard_done"), len(st.session_state.history) - 1)
+        db_cols[1].metric(t("dashboard_remaining"), len(st.session_state.attractions_to_visit))
+        vl_text = st.session_state.virtual_line_details.get('time_str', "Inactive") if st.session_state.virtual_line_active else "Inactive"
+        db_cols[2].metric(t("dashboard_vl_active"), vl_text)
+
+    if st.button(f"{t('find_best_button')}", type="primary", use_container_width=True):
+        if not st.session_state.attractions_to_visit:
+            st.warning(t("empty_list_warning"))
+        else:
+            with st.status(t('status_calculating'), expanded=True) as status:
+                fuseau_horaire_parc = pytz.timezone('Europe/Berlin')
+                now = datetime.now(fuseau_horaire_parc)
+                st.session_state.last_map_update_time = now 
+                vl_details = st.session_state.virtual_line_details if st.session_state.virtual_line_active else None
+                
+                status.update(label=t('status_fetching_wait_times'), state="running")
+                recommendation, all_candidates = mainCode.find_best_next_step(
+                    st.session_state.current_location, st.session_state.attractions_to_visit, now, vl_details
+                )
+                status.update(label=t('status_analyzing_paths'), state="running")
+                st.session_state.last_recommendation = recommendation
+                st.session_state.all_candidates = all_candidates
+
+                if recommendation['cost'] == float('inf'):
+                    st.session_state.last_recommendation = None
+                
+                status.update(label=t('status_done'), state="complete", expanded=False)
+                st.rerun()
+
+    with st.popover(f"{t('manage_vl_button')}", use_container_width=True):
+        with st.form("virtual_line_form"):
+            st.subheader(t("vl_popover_header"))
+            vl_attraction_options = mainCode.VIRTUAL_LINE_ATTRACTIONS
+            current_vl_attraction = st.session_state.virtual_line_details.get("attraction")
+            index = vl_attraction_options.index(current_vl_attraction) if current_vl_attraction in vl_attraction_options else 0
+            
+            vl_attraction = st.selectbox(t("vl_attraction_select"), options=vl_attraction_options, index=index)
+            
+            fuseau_horaire_parc = pytz.timezone('Europe/Berlin')
+            now = datetime.now(fuseau_horaire_parc)
+            rounded_dt = round_up_time(now, minute_step=10)
+            default_time = rounded_dt.time()
+
+            if "time_only" in st.session_state.virtual_line_details:
+                default_time = st.session_state.virtual_line_details["time_only"]
+
+            vl_time = st.time_input(t("vl_time_input"), value=default_time)
+            
+            confirm_col, delete_col = st.columns([1,1])
+            with confirm_col:
+                if st.form_submit_button(t("vl_confirm_button"), use_container_width=True, type="primary"):
+                    appointment_naive = datetime.combine(now.date(), vl_time)
+                    appointment_tz = fuseau_horaire_parc.localize(appointment_naive)
+
+                    if appointment_tz <= now:
+                        appointment_tz += timedelta(days=1)
+
+                    st.session_state.virtual_line_active = True
+                    st.session_state.virtual_line_details = {
+                        "attraction": vl_attraction, "time": appointment_tz,
+                        "time_only": appointment_tz.time(), "time_str": appointment_tz.strftime('%H:%M'),
+                        "timestamp": appointment_tz.timestamp()
+                    }
+                    st.toast(t("vl_set_toast", attraction=vl_attraction, time=appointment_tz.strftime('%H:%M')), icon="✅")
+                    st.rerun()
+            with delete_col:
+                if st.form_submit_button(t("vl_delete_button"), use_container_width=True):
+                    st.session_state.virtual_line_active = False
+                    st.session_state.virtual_line_details = {}
+                    st.session_state.last_recommendation = None
+                    st.session_state.all_candidates = None
+                    st.toast(t("vl_cancelled_toast"), icon="❌")
+                    st.rerun()
+
+    if st.session_state.last_recommendation:
+        rec = st.session_state.last_recommendation
+        with st.container(border=True):
+            if rec['cost'] == float('inf'):
+                 st.error(t("no_attraction_possible"))
+            else:
+                st.success(t("suggested_destination", destination=rec['destination']))
+                sub_col1, sub_col2 = st.columns(2)
+                real_wait = rec['real_wait_time']
+                wait_display = f"🔴 {t('closed')}" if real_wait == "CLOSED" else f"~{real_wait:.0f} {t('minutes_abbr')}"
+                sub_col1.metric(f"🚶 {t('travel_metric')}", f"~{rec['travel_time']:.0f} {t('minutes_abbr')}")
+                sub_col2.metric(f"⏳ {t('wait_metric')}", wait_display)
+                
+                if st.button(f"✅ {t('done_button', destination=rec['destination'])}", use_container_width=True):
+                    last_done = rec['destination']
+                    st.session_state.history.append(last_done)
+                    st.session_state.current_location = last_done
+                    if last_done in st.session_state.attractions_to_visit:
+                        st.session_state.attractions_to_visit.remove(last_done)
+                    st.session_state.last_recommendation = None
+                    st.session_state.all_candidates = None
+                    update_url_state()
+                    st.rerun()
+
+    elif st.session_state.all_candidates and st.session_state.all_candidates[0]['cost'] == float('inf'):
+         st.error(t("no_attraction_possible"))
+
+    if st.session_state.all_candidates:
+        with st.expander(f"{t('show_details_expander')}", expanded=False):
+            for candidate in st.session_state.all_candidates:
+                is_late = candidate.get('is_late', False)
+                if is_late:
+                    st.markdown("<div style='opacity: 0.5;'>", unsafe_allow_html=True)
+
+                st.markdown(f"--- \n**{t('candidate_header', destination=candidate['destination'])}**")
+                
+                cols = st.columns(4)
+                
+                cols[0].metric(t("travel_details"), f"{candidate['travel_time']:.0f} {t('minutes_abbr')}")
+
+                real_wait = candidate['real_wait_time']
+                predicted_wait = candidate['predicted_wait_time']
+                delta_value = None
+                if real_wait == "CLOSED":
+                    metric_value = t("closed")
+                else:
+                    predicted_display = f"{predicted_wait:.0f}" if isinstance(predicted_wait, (int, float)) else t("not_applicable_abbr")
+                    metric_value = f"{real_wait:.0f} / {predicted_display} {t('minutes_abbr')}"
+                    if isinstance(predicted_wait, (int, float)) and real_wait != "CLOSED":
+                        diff = real_wait - predicted_wait
+                        delta_value = f"{diff:+.0f}"
+                cols[1].metric(t("wait_details"), metric_value, delta=delta_value, delta_color="inverse")
+                
+                if st.session_state.virtual_line_active:
+                    arrival_time_vl = candidate.get('arrival_at_vl')
+                    arrival_display = arrival_time_vl.strftime('%H:%M') if isinstance(arrival_time_vl, datetime) else t("not_applicable_abbr")
+                    cols[2].metric(t("end_time_vl_details"), arrival_display, help="Heure d'arrivée estimée à l'attraction en Virtual Line")
+                else:
+                    end_time = candidate.get('end_time')
+                    end_time_display = end_time.strftime('%H:%M') if isinstance(end_time, datetime) else t("not_applicable_abbr")
+                    cols[2].metric(t("end_time_details"), end_time_display)
+
+                cost_display = f"{candidate['cost']:.2f}" if candidate['cost'] != float('inf') else "🚫"
+                cols[3].metric(t("cost_details"), cost_display, help="Score de priorité (plus bas = mieux)")
+                
+                if candidate['cost'] != float('inf'):
+                    if st.button(t('choose_this_attraction'), key=f"done_candidate_{candidate['destination']}", use_container_width=True):
+                        last_done = candidate['destination']
+                        st.session_state.history.append(last_done)
+                        st.session_state.current_location = last_done
+                        if last_done in st.session_state.attractions_to_visit:
+                            st.session_state.attractions_to_visit.remove(last_done)
+                        st.session_state.last_recommendation = None
+                        st.session_state.all_candidates = None
+                        update_url_state()
+                        st.rerun()
+
+                if is_late:
+                    st.markdown("</div>", unsafe_allow_html=True)
