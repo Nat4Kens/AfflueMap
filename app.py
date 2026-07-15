@@ -150,6 +150,7 @@ def find_closest_attraction(user_lat, user_lon):
 # --- DÉBUT DE L'INTERFACE PRINCIPALE ---
 st.title(f"🎢 {t('app_title')}")
 
+
 # --- GÉOLOCALISATION ET INITIALISATION ---
 location_data = streamlit_geolocation()
 user_lat = location_data.get('latitude') if location_data else None
@@ -404,4 +405,3 @@ with col_actions:
 
                 if is_late:
                     st.markdown("</div>", unsafe_allow_html=True)
-
