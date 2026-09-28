@@ -86,7 +86,9 @@ def create_park_map(history, current_loc, recommendation, attractions_to_visit, 
         avg_lon = sum(coords[loc][1] for loc in valid_points) / len(valid_points)
         center_coords = (avg_lat, avg_lon)
 
-    m = folium.Map(location=center_coords, zoom_start=15, tiles="CartoDB positron")
+    carto_tile_url = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_41n3_1_d4423cc0d243c033e52d6a7f"
+    m = folium.Map(location=center_coords, zoom_start=15, tiles=carto_tile_url, attr='&copy; <a href="https://carto.com/attributions">CARTO</a>')
+
 
     if len(history) > 1:
         path_coords = [coords[loc] for loc in history if loc in coords]
